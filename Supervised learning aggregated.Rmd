@@ -9,22 +9,112 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Loading packages
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r packages, message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+packages <- c(
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr",
+  "haven")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
-```{r cars}
-summary(cars)
+if(!("quanteda.classifiers" %in% rownames(installed.packages()))) remotes::install_github("quanteda/quanteda.classifiers")
+
+lapply(c(packages, "quanteda.classifiers"), require, character.only = TRUE)
+
 ```
 
-## Including Plots
+## Loading data
 
-You can also embed plots, for example:
+```{r data}
+sample_germany <- read_dta("../sample_germany.dta")
+table(sample_germany$country)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# Correcting classification for three documents
+sample_germany$issue[sample_germany$id == 229] <- 191
+sample_germany$issue[sample_germany$id == 731] <- 7
+sample_germany$issue[sample_germany$id == 902] <- 10
+
+# Subset to relevant vars
+germany_textpress <- sample_germany %>% select("header", "text", "issue", "position", "id")
+
+# Distribution of issues in the hand-coded sample
+table(germany_textpress$issue)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Merging categories
+
+```{r categories}
+germany_textpress$issue_r1 <- as.numeric(germany_textpress$issue)
+
+germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
+                           `8`  = 7, # Environment & Energy
+                           `13` = 10, # Transportation & Welfare
+                           `14` = 10, # Housing & Welfare
+                           `18` = 15, # Foreign Trade and Domestic Commerce
+                           `98` = 99, # Non-thematic & Other
+                           `23` = 99) # Culture: few observations
+                                                  )
+
+table(germany_textpress$issue_r1)
+
+```
+
+## Creating the document frequency matrix (dfm)
+
+```{r dfm}
+corp_press <- str_c(germany_textpress$header, " ", germany_textpress$text) %>% corpus()
+
+# Add id var to corpus
+docvars(corp_press, "id") <- germany_textpress$id
+docvars(corp_press, "issue_r1") <- germany_textpress$issue_r1
+
+# Create random sample for test dataset (size: 1/5 of all classified documents)
+set.seed(300)
+id_test <- sample(docvars(corp_press, "id"), round(length(docvars(corp_press, "id"))/5, 0), replace = FALSE)
+
+# Create training and test set 
+dfmat_training <- corpus_subset(corp_press, !(id %in% id_test)) %>%
+  dfm(remove = stopwords("de"), stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% # stem and remove stopwords, punctuation etc.
+  dfm_trim(min_docfreq = 0.005, max_docfreq = .8, docfreq_type = "prop") # Remove words occurring in less than .5% or more than 80% of documents
+
+dfmat_test <- corpus_subset(corp_press, id %in% id_test) %>% 
+  dfm(remove = stopwords("de"), stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% # stem and remove stopwords, punctuation etc.
+  dfm_trim(min_docfreq = 0.005, max_docfreq = .8, docfreq_type = "prop") # Remove words occurring in less than .5% or more than 80% of documents
+
+
+```
+
+
+## Naive Bayes classification model
+```{r textmodel_nb}
+
+tmod_nb_r1 <- textmodel_nb(dfmat_training, dfmat_training$issue_r1)
+# summary(tmod_nb_r1)
+
+
+```
+
+
+## Evaluation
+```{r nb_evaluation}
+
+dfmat_matched <- dfm_match(dfmat_test, 
+                           features = featnames(dfmat_training))
+
+actual_class <- docvars(dfmat_matched, "issue_r1")
+predicted_class <- predict(tmod_nb_r1, newdata = dfmat_matched)
+tab_class <- table(actual_class, predicted_class)
+tab_class
+
+confusionMatrix(tab_class, mode = "prec_recall")
+
+crossval(tmod_nb_r1, k = 5) # Five-fold cross-validation
+
+
+```
+
+
+
+
