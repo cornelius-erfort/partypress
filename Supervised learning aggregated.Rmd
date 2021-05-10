@@ -2,7 +2,7 @@
 title: "Supervised learning aggregated"
 author: "Cornelius Erfort"
 date: "5/10/2021"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
