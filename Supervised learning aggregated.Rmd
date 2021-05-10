@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Loading packages
 
-```{r packages, message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+```{r packages, message=FALSE, warning=FALSE, include=FALSE}
 packages <- c(
   "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr",
   "haven")
