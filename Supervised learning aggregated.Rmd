@@ -12,10 +12,11 @@ knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T)
 
 ## Loading packages
 
+This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
+
 ```{r packages, message=FALSE, warning=FALSE, results='hide'}
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR",
-  "haven")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "haven")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -29,9 +30,10 @@ lapply(c(packages, "quanteda.classifiers"), require, character.only = T)
 
 ## Loading data
 
+The sample data for Germany consists of 2,742 labelled press releases. The dataset is not  on GitHub and is loaded from the parent directory here.
+
 ```{r data}
 sample_germany <- read_dta("../sample_germany.dta")
-table(sample_germany$country)
 
 # Correcting classification for three documents
 sample_germany$issue[sample_germany$id == 229] <- 191
@@ -48,23 +50,29 @@ table(germany_textpress$issue)
 
 ## Merging categories
 
+To improve the classification similar topics are merged. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
+
 ```{r categories}
 germany_textpress$issue_r1 <- as.numeric(germany_textpress$issue)
 
 germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
-                           `8`  = 7, # Environment & Energy
+                           `8`  = 7,  # Environment & Energy
                            `13` = 10, # Transportation & Welfare
                            `14` = 10, # Housing & Welfare
                            `18` = 15, # Foreign Trade and Domestic Commerce
                            `98` = 99, # Non-thematic & Other
-                           `23` = 99) # Culture: few observations
+                           `23` = 99) # Culture: Too few observations
                                                   )
-
+# Distribution with merged categories
 table(germany_textpress$issue_r1)
 
 ```
 
 ## Creating the document frequency matrix (dfm)
+
+We create a text corpus based on the header and text of each press release. We draw a random sample from the corpus to create a training and a test dataset. The test dataset consists of approx. one fifth of the documents.
+
+Subsequently, we follow standard procedures for the preparation of the document frequency matrix. First, we remove stopwords and stem the words in order to better capture the similarities across documents. Second, we remove all punctuation, numbers, symbols and URLs. In a last step, we remove all words occurring in less than 0.5% or more than 90% of documents.
 
 ```{r dfm}
 corp_press <- str_c(germany_textpress$header, " ", germany_textpress$text) %>% corpus()
@@ -80,42 +88,48 @@ id_test <- sample(docvars(corp_press, "id"),
 
 # Create training and test set 
 dfmat_training <- corpus_subset(corp_press, !(id %in% id_test)) %>%
-  dfm(remove = stopwords("de"), 
+  dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
       stem = T, 
       remove_punct = T, 
       remove_number = T, 
       remove_symbols = T, 
-      remove_url = T) %>% # Stem and remove stopwords, punctuation etc.
-  dfm_trim(min_docfreq = 0.005, 
-           max_docfreq = .8, 
-           docfreq_type = "prop") # Remove words occurring <.5% or > 80% of docs
+      remove_url = T) %>% 
+  dfm_trim(min_docfreq = 0.005, # Remove words occurring <.5% or > 80% of docs
+           max_docfreq = .9, 
+           docfreq_type = "prop") 
 
 dfmat_test <- corpus_subset(corp_press, id %in% id_test) %>% 
-   dfm(remove = stopwords("de"), 
+   dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
       stem = T, 
       remove_punct = T, 
       remove_number = T, 
       remove_symbols = T, 
-      remove_url = T) %>% # Stem and remove stopwords, punctuation etc.
-  dfm_trim(min_docfreq = 0.005, 
-           max_docfreq = .8, 
-           docfreq_type = "prop") # Remove words occurring <.5% or > 80% of docs
+      remove_url = T) %>% 
+  dfm_trim(min_docfreq = 0.005, # Remove words occurring <.5% or > 80% of docs
+           max_docfreq = .9, 
+           docfreq_type = "prop") 
 
 
 ```
 
 
-## Naive Bayes classification model
+## Multinomial Naive Bayes classification model
+
+We calculate a Multinomial Naive Bayes text classification model. Multinomial NB models take into account the number of times a word occurs in a document, whereas Bernoulli NB models use the presence or absence of words only.
+
 ```{r textmodel_nb}
 
-tmod_nb_r1 <- textmodel_nb(dfmat_training, dfmat_training$issue_r1)
-# summary(tmod_nb_r1)
-
+tmod_nb_r1 <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
 
 ```
 
 
 ## Evaluation
+
+To evaluate the quality of the textmodel, we compare the actual labels of the test dataset with those predicted by the model.
+
+We perform a five-fold cross-validation of the fitted textmodel in order to ensure the robustness
+
 ```{r nb_evaluation}
 
 dfmat_matched <- dfm_match(dfmat_test, 
@@ -126,9 +140,8 @@ predicted_class <- predict(tmod_nb_r1, newdata = dfmat_matched)
 tab_class <- table(actual_class, predicted_class)
 tab_class
 
-# confusionMatrix(tab_class, mode = "prec_recall")
-
-crossval(tmod_nb_r1, k = 5) # Five-fold cross-validation
+# Five-fold cross-validation
+crossval(tmod_nb_r1, k = 5) 
 
 
 ```
