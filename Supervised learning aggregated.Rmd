@@ -156,6 +156,8 @@ crossval(tmod_nb_r1, k = 5)
 
 ## Classifying unlabelled data
 
+We trained the models using a set of 2,742 labelled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labelled and unlabelled press releases in our sample.
+
 ```{r unlabelled}
 
 # Loading full dataset from parent dir
@@ -211,6 +213,12 @@ issue_agendas$attention <- issue_agendas$freq / issue_agendas$party_sum
 
 # Add issue descriptions
 issue_agendas <- merge(issue_agendas, issue_categories, by = "issue_r1")
+```
+
+
+## Plotting issue attention: examples
+
+```{r plots, out.width = "80%"}
 
 if(!dir.exists("plots")) dir.create("plots")
 
@@ -223,6 +231,7 @@ plot_issue_party <- function(plot_issue, plot_party) ggplot(issue_agendas %>% fi
   # ggtitle("Share of press releases for issue per quarter" %>% str_c(" (", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], " - ", plot_party, ")")) +
   ggsave(str_c("plots/", plot_issue, " - ", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], "_", plot_party, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
   ggsave(str_c("plots/", plot_issue, " - ", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_", plot_party, ".png"), width = 5*2^.5, height = 5)
+
 
 # Plot quarterly issue attention for category "7 Environment & Energy" for "union_fraktion"
 plot_issue_party(7,  "union_fraktion")
