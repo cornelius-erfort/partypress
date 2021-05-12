@@ -2,7 +2,9 @@
 title: "Supervised learning aggregated"
 author: "Cornelius Erfort"
 date: "5/10/2021"
-output: pdf_document
+output: 
+  pdf_document:
+    toc: true
 ---
 
 ```{r setup, include=FALSE}
@@ -18,7 +20,7 @@ This script is based mainly on the functions of the quanteda package. For the cr
 
 ```{r packages, message=FALSE, warning=FALSE, results='hide'}
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "haven", "lubridate")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "haven", "lubridate", "SuperLearner")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -92,8 +94,8 @@ set.seed(300)
 id_test <- sample(docvars(corp_press, "id"), 
                   round(length(docvars(corp_press, "id"))/5, 0), replace = FALSE)
 
-# Create training and test set 
-dfmat_training <- corpus_subset(corp_press, !(id %in% id_test)) %>%
+# Create dfm
+dfmat <- corpus_subset(corp_press) %>%
   dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
       stem = T, 
       remove_punct = T, 
@@ -104,39 +106,93 @@ dfmat_training <- corpus_subset(corp_press, !(id %in% id_test)) %>%
            max_docfreq = .9, 
            docfreq_type = "prop") 
 
-dfmat_test <- corpus_subset(corp_press, id %in% id_test) %>% 
-   dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
-      stem = T, 
-      remove_punct = T, 
-      remove_number = T, 
-      remove_symbols = T, 
-      remove_url = T) %>% 
-  dfm_trim(min_docfreq = 0.005, # Remove words occurring <.5% or > 80% of docs
-           max_docfreq = .9, 
-           docfreq_type = "prop") 
+# Create training and test set 
+dfmat_training <- dfm_subset(dfmat, !(id %in% id_test))
+dfmat_test <- dfm_subset(dfmat, id %in% id_test)
 
 
 ```
 
+# Textmodels
 
 ## Multinomial Naive Bayes classification model
 
 We calculate a Multinomial Naive Bayes text classification model. Multinomial NB models take into account the number of times a word occurs in a document, whereas Bernoulli NB models use the presence or absence of words only.
 
-```{r textmodel_nb}
+```{r nb}
 
-tmod_nb_r1 <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
+
+
+# Five-fold cross-validation for every possible parameter combination
+nb_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli")))
+head(nb_eval)
+
+test <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform"), distribution = c("multinomial")))
+
+aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution, nb_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
+
 
 ```
 
 
-## Evaluation
+## SVM
 
-To evaluate the quality of the textmodel, we compare the actual labels of the test dataset with those predicted by the model.
+Linear predictive models estimation based on the LIBLINEAR C/C++ Library.
 
-We perform a five-fold cross-validation of the fitted textmodel in order to ensure the robustness
+```{r svm}
 
-```{r nb_evaluation}
+# Five-fold cross-validation for every possible parameter combination
+svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0:7)))
+head(svm_eval)
+
+aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy)) 
+
+
+```
+
+## ?
+
+```{r next-algorithm}
+
+svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq")))
+head(svm_eval)
+
+aggregate(cbind(accuracy, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
+
+
+```
+
+# Ensemble methods: SuperLearner?
+```{r ensemble}
+
+# training <- !(1:ndoc(corp_press) %in% id_test)
+# 
+# Xtrain <- as.data.frame(as.matrix(dfm_trim(dfmat, min_docfreq = 15, 
+#                         max_docfreq=0.80*nrow(dfmat), verbose = T)))
+# 
+# features <- names(Xtrain)
+# names(Xtrain) <- paste0("V", 1:ncol(Xtrain))
+# 
+# set.seed(777)
+# 
+# sl <- SuperLearner(Y = dfmat$issue_r1[training], X = Xtrain[training,], 
+#                   family = binomial(),
+#                   SL.library = c("SL.glmnet"),
+#                   cvControl=list(V=2))
+
+
+```
+
+
+# Classification of unlabelled data
+
+## Using the NB textmodel
+
+We trained the models using a set of 2,742 labelled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labelled and unlabelled press releases in our sample.
+
+```{r unlabelled}
+
+tmod_nb_r1 <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
 
 dfmat_matched <- dfm_match(dfmat_test, 
                            features = featnames(dfmat_training))
@@ -145,20 +201,6 @@ actual_class <- docvars(dfmat_matched, "issue_r1")
 predicted_class <- predict(tmod_nb_r1, newdata = dfmat_matched)
 tab_class <- table(actual_class, predicted_class)
 tab_class
-
-# Five-fold cross-validation
-crossval(tmod_nb_r1, k = 5) 
-
-
-```
-
-
-
-## Classifying unlabelled data
-
-We trained the models using a set of 2,742 labelled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labelled and unlabelled press releases in our sample.
-
-```{r unlabelled}
 
 # Loading full dataset from parent dir
 all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id))
@@ -216,7 +258,7 @@ issue_agendas <- merge(issue_agendas, issue_categories, by = "issue_r1")
 ```
 
 
-## Plotting issue attention: examples
+## Plotting issue attention: Examples
 
 ```{r plots, out.width = "80%"}
 
@@ -234,10 +276,16 @@ plot_issue_party <- function(plot_issue, plot_party) ggplot(issue_agendas %>% fi
 
 
 # Plot quarterly issue attention for category "7 Environment & Energy" for "union_fraktion"
-plot_issue_party(7,  "union_fraktion")
+plot_issue_party(7,  "union_fraktion") # There seems to be a decline since Fukushima in 2011.
 
 # Plot quarterly issue attention for category "9 Immigration" for "union_fraktion"
-plot_issue_party(9,  "union_fraktion")
+plot_issue_party(9,  "union_fraktion") # There seems to be a peak around the so-called refugee crisis in 2015.
+
+# Plot quarterly issue attention for category "7 Environment & Energy" for "spd_fraktion"
+plot_issue_party(7,  "spd_fraktion") # There seems to be a decline since Fukushima in 2011.
+
+# Plot quarterly issue attention for category "10 Welfare" for "spd_fraktion"
+plot_issue_party(10,  "spd_fraktion") # There seems to be a lower emphasis on welfare after the entry into government in fall 2013.
 
 
 ```
