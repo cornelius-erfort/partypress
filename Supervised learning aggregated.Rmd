@@ -10,13 +10,15 @@ knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T)
 
 ```
 
+This script requires the files "sample_germany.dta" and "data_joint.RDS" in the parent directory.
+
 ## Loading packages
 
 This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
 
 ```{r packages, message=FALSE, warning=FALSE, results='hide'}
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "haven")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "haven", "lubridate")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -63,6 +65,10 @@ germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
                            `98` = 99, # Non-thematic & Other
                            `23` = 99) # Culture: Too few observations
                                                   )
+# Category descriptions
+
+issue_categories <- data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), issue_r1_descr = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", "Env. & Energy", "Immigration", "Welfare", "Law & Crime", "Commerce", "Defense", "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
+
 # Distribution with merged categories
 table(germany_textpress$issue_r1)
 
@@ -153,7 +159,7 @@ crossval(tmod_nb_r1, k = 5)
 ```{r unlabelled}
 
 # Loading full dataset from parent dir
-all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.y, id))
+all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id))
 
 # Constructing the document frequency matrix
 dfmat_all <- corpus(str_c(all_germany$header, " ", all_germany$text.x)) %>% 
@@ -164,7 +170,10 @@ dfmat_all <- corpus(str_c(all_germany$header, " ", all_germany$text.x)) %>%
       remove_symbols = T, 
       remove_url = T)
 
-docvars(dfmat_all, )
+# Adding docvars
+docvars(dfmat_all, "party") <- all_germany$party.x
+docvars(dfmat_all, "date") <- all_germany$date.x
+docvars(dfmat_all, "id") <- all_germany$id
 
 # Subsetting to features in the training data
 dfmat_all <- dfm_match(dfmat_all, features = featnames(dfmat_training)) 
@@ -179,7 +188,47 @@ table(dfmat_all$issue_r1)
 
 ## Aggregation of the issues categories over time and party
 
+To measure parties' evolving issue agendas, we aggregate the category counts over time.
+
 ```{r aggregation}
+
+# Create dataframe from dfm
+issue_agendas <- data.frame(date = docvars(dfmat_all, "date"), party = docvars(dfmat_all, "party"), issue_r1 = docvars(dfmat_all, "issue_r1"))
+
+# Make date quarterly
+issue_agendas$date <- as.character(issue_agendas$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
+
+# Add variable for counting
+issue_agendas$freq <- 1
+
+# Aggregate by party, date and issue
+issue_agendas <- aggregate(freq ~ party + date + issue_r1, issue_agendas, sum)
+
+# Add var for total press releases per party and month
+issue_agendas$party_sum <- ave(issue_agendas$freq, issue_agendas$date, issue_agendas$party, FUN = sum)
+
+issue_agendas$attention <- issue_agendas$freq / issue_agendas$party_sum
+
+# Add issue descriptions
+issue_agendas <- merge(issue_agendas, issue_categories, by = "issue_r1")
+
+if(!dir.exists("plots")) dir.create("plots")
+
+# Function for plotting parties' issue attention over time
+plot_issue_party <- function(plot_issue, plot_party) ggplot(issue_agendas %>% filter(issue_r1 == plot_issue & party == plot_party), aes(x = date, y = attention)) +
+  geom_step() +
+  geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 3, se = F) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  scale_x_date(date_minor_breaks = "1 year") +
+  # ggtitle("Share of press releases for issue per quarter" %>% str_c(" (", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], " - ", plot_party, ")")) +
+  ggsave(str_c("plots/", plot_issue, " - ", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], "_", plot_party, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
+  ggsave(str_c("plots/", plot_issue, " - ", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_", plot_party, ".png"), width = 5*2^.5, height = 5)
+
+# Plot quarterly issue attention for category "7 Environment & Energy" for "union_fraktion"
+plot_issue_party(7,  "union_fraktion")
+
+# Plot quarterly issue attention for category "9 Immigration" for "union_fraktion"
+plot_issue_party(9,  "union_fraktion")
 
 
 ```
