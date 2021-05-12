@@ -148,4 +148,38 @@ crossval(tmod_nb_r1, k = 5)
 
 
 
+## Classifying unlabelled data
 
+```{r unlabelled}
+
+# Loading full dataset from parent dir
+all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.y, id))
+
+# Constructing the document frequency matrix
+dfmat_all <- corpus(str_c(all_germany$header, " ", all_germany$text.x)) %>% 
+  dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
+      stem = T, 
+      remove_punct = T, 
+      remove_number = T, 
+      remove_symbols = T, 
+      remove_url = T)
+
+docvars(dfmat_all, )
+
+# Subsetting to features in the training data
+dfmat_all <- dfm_match(dfmat_all, features = featnames(dfmat_training)) 
+
+# Predicting the issue category for all documents
+dfmat_all$issue_r1 <- predict(tmod_nb_r1, newdata = dfmat_all)
+
+table(dfmat_all$issue_r1)
+
+```
+
+
+## Aggregation of the issues categories over time and party
+
+```{r aggregation}
+
+
+```
