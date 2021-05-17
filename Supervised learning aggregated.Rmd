@@ -5,22 +5,29 @@ date: "5/10/2021"
 output: 
   pdf_document:
     toc: true
+    number_sections: true
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T)
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
 
 ```
 
-This script requires the files "sample_germany.dta" and "data_joint.RDS" in the parent directory.
+
+# Setting up
+
+This script requires the files "sample_germany.dta" and "data_joint.RDS" in the parent directory. It also writes and reads two csv-files from the parent directory.
 
 ## Loading packages
 
 This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
 
 ```{r packages, message=FALSE, warning=FALSE, results='hide'}
+
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "haven", "lubridate", "SuperLearner")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "readstata13", "lubridate", "reticulate")
+
+# Using readstata13 because haven causes crash
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -28,7 +35,7 @@ if(!("quanteda.classifiers" %in% rownames(installed.packages()))) {
   remotes::install_github("quanteda/quanteda.classifiers")
 } 
 
-lapply(c(packages, "quanteda.classifiers"), require, character.only = T)
+invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = T))
 
 ```
 
@@ -37,7 +44,8 @@ lapply(c(packages, "quanteda.classifiers"), require, character.only = T)
 The sample data for Germany consists of 2,742 labelled press releases. The dataset is not  on GitHub and is loaded from the parent directory here.
 
 ```{r data}
-sample_germany <- read_dta("../sample_germany.dta")
+
+sample_germany <- read.dta13("../sample_germany.dta", convert.factors = F)
 
 # Correcting classification for three documents
 sample_germany$issue[sample_germany$id == 229] <- 191
@@ -52,9 +60,11 @@ table(germany_textpress$issue)
 
 ```
 
+
+
 ## Merging categories
 
-To improve the classification similar topics are merged. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
+In order to improve the classification, similar topics are merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
 
 ```{r categories}
 germany_textpress$issue_r1 <- as.numeric(germany_textpress$issue)
@@ -68,7 +78,6 @@ germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
                            `23` = 99) # Culture: Too few observations
                                                   )
 # Category descriptions
-
 issue_categories <- data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), issue_r1_descr = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", "Env. & Energy", "Immigration", "Welfare", "Law & Crime", "Commerce", "Defense", "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
 
 # Distribution with merged categories
@@ -104,12 +113,15 @@ dfmat <- corpus_subset(corp_press) %>%
       remove_url = T) %>% 
   dfm_trim(min_docfreq = 0.005, # Remove words occurring <.5% or > 80% of docs
            max_docfreq = .9, 
-           docfreq_type = "prop") 
+           docfreq_type = "prop") %>%
+  suppressWarnings()
 
 # Create training and test set 
 dfmat_training <- dfm_subset(dfmat, !(id %in% id_test))
 dfmat_test <- dfm_subset(dfmat, id %in% id_test)
 
+# Make order of documents random
+dfmat <- dfmat[sample(1:ndoc(dfmat), ndoc(dfmat)), ]
 
 ```
 
@@ -121,67 +133,159 @@ We calculate a Multinomial Naive Bayes text classification model. Multinomial NB
 
 ```{r nb}
 
-
-
 # Five-fold cross-validation for every possible parameter combination
-nb_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli")))
+nb_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)))
 head(nb_eval)
 
-test <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform"), distribution = c("multinomial")))
-
-aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution, nb_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
-
+aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution + smooth, nb_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
 
 ```
+
+Assuming a multinomial distribution of text features leads to a higher accuracy of the models compared to a Bernoulli distribution. The other benchmark parameters confirm this finding.
+
+There is no clear pattern in regard to the effect of the priors on the quality of the models. A smoothing parameter of 1 for the feature counts seems optimal.
 
 
 ## SVM
 
 Linear predictive models estimation based on the LIBLINEAR C/C++ Library.
 
+(Not running here to save time.)
+
 ```{r svm}
 
 # Five-fold cross-validation for every possible parameter combination
-svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0:7)))
-head(svm_eval)
-
-aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy)) 
+# svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0:7)))
+# head(svm_eval)
+# 
+# aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
 
 
 ```
 
-## ?
+None of the configurations lead to a higher accuracy compared to the benchmark NB model.
+
+Regarding the type of linear models, type 0 (L2-regularized logistic regression, primal) and 7 (L2-regularized logistic regression, dual) seem to provide optimal results. There is no clear pattern regarding the weights.
+
+The calculation of the models requires much more time/computing compared to the NB models.
+
+
+## Next algorithm...
 
 ```{r next-algorithm}
 
-svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq")))
-head(svm_eval)
-
-aggregate(cbind(accuracy, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
+# svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq")))
+# head(svm_eval)
+# 
+# aggregate(cbind(accuracy, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
 
 
 ```
 
-# Ensemble methods: SuperLearner?
+# Ensemble methods: SuperLearner
+
+Prepare the datasets for the python code chunk.
+
 ```{r ensemble}
 
-# training <- !(1:ndoc(corp_press) %in% id_test)
-# 
-# Xtrain <- as.data.frame(as.matrix(dfm_trim(dfmat, min_docfreq = 15, 
-#                         max_docfreq=0.80*nrow(dfmat), verbose = T)))
-# 
-# features <- names(Xtrain)
-# names(Xtrain) <- paste0("V", 1:ncol(Xtrain))
-# 
-# set.seed(777)
-# 
-# sl <- SuperLearner(Y = dfmat$issue_r1[training], X = Xtrain[training,], 
-#                   family = binomial(),
-#                   SL.library = c("SL.glmnet"),
-#                   cvControl=list(V=2))
+# Get vector indicating training sample
+training <- !(1:ndoc(corp_press) %in% id_test)
+
+# Subset training sample and write
+if(!file.exists("../train_data.csv")) as.data.frame(as.matrix(dfm_trim(dfmat, min_docfreq = 15,
+                        max_docfreq=0.80*nrow(dfmat), verbose = T))) %>%
+  write.csv(train_data, "../train_data.csv")
+
+# Get labels for training sample and write
+if(!file.exists("../train_labels.csv")) write.csv(dfmat$issue_r1, "../train_labels.csv")
 
 
 ```
+
+Run the SuperLearner in Python.
+
+```{python superlearner}
+# Load packages
+import pandas as pd
+import numpy as np
+
+# Load sklearn tools
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+# Load classifiers
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import BernoulliNB
+
+# Load SuperLearner
+from mlens.ensemble import SuperLearner
+
+# create a list of base-models
+def get_models():
+	models = list()
+	models.append(MultinomialNB())
+	models.append(BernoulliNB())
+	models.append(LogisticRegression(solver = 'liblinear', max_iter = 200))
+	models.append(DecisionTreeClassifier())
+	models.append(SVC(gamma = 'scale', probability = True))
+	models.append(GaussianNB())
+	models.append(KNeighborsClassifier())
+	models.append(AdaBoostClassifier())
+	models.append(BaggingClassifier())
+	models.append(RandomForestClassifier())
+	models.append(ExtraTreesClassifier())
+	return models
+
+# create the super learner
+def get_super_learner(X):
+	ensemble = SuperLearner(scorer = accuracy_score, folds = 5, shuffle = True, sample_size = len(X))
+	
+	# add base models
+	models = get_models()
+	ensemble.add(models)
+	
+	# add the meta model
+	ensemble.add_meta(LogisticRegression(solver = 'liblinear'))
+	return ensemble
+ 
+# load press release data
+train_data = pd.read_csv("../train_data.csv", index_col = 0)
+train_labels = pd.read_csv("../train_labels.csv", index_col = 0)
+
+X = train_data.values # Documents are already in random order
+y = np.asarray([int(i) for i in train_labels.values])
+
+# create the inputs and outputs
+
+# split data
+train, test, train_val, test_val = train_test_split(X, y, test_size = 0.20) # test_size = 0.50
+print('Train', train.shape, train_val, 'Test', test.shape, test_val.shape)
+
+# create the super learner
+ensemble = get_super_learner(train)
+
+# fit the super learner
+ensemble.fit(train, train_val)
+
+# summarize base learners
+print(ensemble.data)
+
+# make predictions on hold out set
+test_hat = ensemble.predict(test)
+
+print('Super Learner: %.3f' % (accuracy_score(test_val, test_hat) * 100))
+```
+
+The SuperLearner has a much lower accuracy than the base learners?!
 
 
 # Classification of unlabelled data
