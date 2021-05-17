@@ -316,7 +316,7 @@ dfmat_all <- corpus(str_c(all_germany$header, " ", all_germany$text.x)) %>%
       remove_punct = T, 
       remove_number = T, 
       remove_symbols = T, 
-      remove_url = T)
+      remove_url = T) %>% suppressWarnings()
 
 # Adding docvars
 docvars(dfmat_all, "party") <- all_germany$party.x
