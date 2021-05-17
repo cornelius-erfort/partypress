@@ -247,14 +247,14 @@ def get_models():
 
 # create the super learner
 def get_super_learner(X):
-	ensemble = SuperLearner(scorer = accuracy_score, folds = 5, shuffle = True, sample_size = len(X))
+	ensemble = SuperLearner(scorer = None, folds = 5, shuffle = True, random_state = np.random.seed(3027), sample_size = len(train_val), n_jobs = -1, verbose = True)
 	
 	# add base models
 	models = get_models()
-	ensemble.add(models)
+	ensemble.add(models, proba = True)
 	
 	# add the meta model
-	ensemble.add_meta(LogisticRegression(solver = 'liblinear'))
+	ensemble.add_meta(LogisticRegression(solver = "lbfgs", max_iter = 200), proba = False)
 	return ensemble
  
 # load press release data
@@ -285,8 +285,7 @@ test_hat = ensemble.predict(test)
 print('Super Learner: %.3f' % (accuracy_score(test_val, test_hat) * 100))
 ```
 
-The SuperLearner has a much lower accuracy than the base learners?!
-
+The SuperLearner does not significantly increase the accuracy.
 
 # Classification of unlabelled data
 
