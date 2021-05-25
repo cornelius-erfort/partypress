@@ -23,9 +23,10 @@ This script requires the files "sample_germany.dta" and "data_joint.RDS" in the 
 This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
 
 ```{r packages, message=FALSE, warning=FALSE, results='hide'}
+start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "beepr", "rmarkdown", "e1071", "penalized", "plyr", "readr", "repr", "ggplot2", "rsample", "remotes", "stringr", "formatR", "readstata13", "lubridate", "reticulate")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "randomForest", "adabag", "kableExtra")
 
 # Using readstata13 because haven causes crash
 
@@ -53,14 +54,12 @@ sample_germany$issue[sample_germany$id == 731] <- 7
 sample_germany$issue[sample_germany$id == 902] <- 10
 
 # Subset to relevant vars
-germany_textpress <- sample_germany %>% select("header", "text", "issue", "position", "id")
+germany_textpress <- sample_germany %>% select("header", "text", "issue", "position", "id", "party")
 
 # Distribution of issues in the hand-coded sample
-table(germany_textpress$issue)
+table(germany_textpress$issue) %>% kbl(booktabs = T)
 
 ```
-
-
 
 ## Merging categories
 
@@ -81,7 +80,15 @@ germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
 issue_categories <- data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), issue_r1_descr = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", "Env. & Energy", "Immigration", "Welfare", "Law & Crime", "Commerce", "Defense", "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
 
 # Distribution with merged categories
-table(germany_textpress$issue_r1)
+table(germany_textpress$issue_r1) %>% kbl(booktabs = T)
+
+# Party names
+party_names <- data.frame(party = c(1:8), party_name = c("Bündnis 90/Die Grünen - Fraktion", "AfD - Bundesverband", "AfD - Fraktion", "FDP - Bundesverband", "FDP - Fraktion", "DIE LINKE - Fraktion", "SPD - Fraktion", "CDU/CSU - Fraktion"))
+germany_textpress <- merge(germany_textpress, party_names, by = "party")
+
+# Distribution by parties
+table(germany_textpress$party_name) %>% kbl(booktabs = T)
+
 
 ```
 
@@ -91,12 +98,14 @@ We create a text corpus based on the header and text of each press release. We d
 
 Subsequently, we follow standard procedures for the preparation of the document frequency matrix. First, we remove stopwords and stem the words in order to better capture the similarities across documents. Second, we remove all punctuation, numbers, symbols and URLs. In a last step, we remove all words occurring in less than 0.5% or more than 90% of documents.
 
+
 ```{r dfm}
 corp_press <- str_c(germany_textpress$header, " ", germany_textpress$text) %>% corpus()
 
 # Add id var to corpus
 docvars(corp_press, "id") <- germany_textpress$id
 docvars(corp_press, "issue_r1") <- germany_textpress$issue_r1
+docvars(corp_press, "party_name") <- germany_textpress$party_name
 
 # Create random sample for test dataset (size: 1/5 of all classified documents)
 set.seed(300)
@@ -127,17 +136,44 @@ dfmat <- dfmat[sample(1:ndoc(dfmat), ndoc(dfmat)), ]
 
 # Textmodels
 
-## Multinomial Naive Bayes classification model
+Following Barbera et al. (2021) we estimate the following models:
 
-We calculate a Multinomial Naive Bayes text classification model. Multinomial NB models take into account the number of times a word occurs in a document, whereas Bernoulli NB models use the presence or absence of words only.
+1. Naive Bayes (multinomial)
+2. Ridge regression (L2)
+3. Lasso regression (L1)
+4. Elastic Net
+5. SVM
+6. Random Forest
 
-```{r nb}
+(Barberá, P., Boydstun, A., Linn, S., McMahon, R., & Nagler, J. (2021). Automated Text Classification of News Articles: A Practical Guide. Political Analysis, 29(1), 19-42. doi:10.1017/pan.2020.8)
 
-# Five-fold cross-validation for every possible parameter combination
-nb_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)))
-head(nb_eval)
+We are mainly using the R packages quanteda and LiblineaR for the textmodels. For the SuperLearner ensemble we are replicating the models in Python with the sklearn library and use the mlens library to build the ensemble.
 
-aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution + smooth, nb_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
+For most classifications we use a ten-fold cross-validation.
+
+An overview of the results for each classifier can be found in the next section.
+
+## Naive Bayes (multinomial)
+
+We calculate a Multinomial Naive Bayes (NB) text classification model. Multinomial NB models take into account the number of times a word occurs in a document, whereas Bernoulli NB models use the presence or absence of words only.
+
+We also test whether a Bernoulli NB model potentially outperforms the multinomial one.
+
+```{r tm-naivebayes}
+
+folds_cv <- 10
+
+# Ten-fold cross-validation for every possible parameter combination
+naivebayes_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)))
+head(naivebayes_eval)
+
+(naivebayes_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution + smooth, naivebayes_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+
+naivebayes_eval_aggr$model <- "naive bayes"
+
+# Create a dataframe for all textmodels and save first row
+tm_eval <- data.frame()
+tm_eval <- naivebayes_eval_aggr[1, ] %>% rbind.fill(tm_eval)
 
 ```
 
@@ -146,41 +182,206 @@ Assuming a multinomial distribution of text features leads to a higher accuracy 
 There is no clear pattern in regard to the effect of the priors on the quality of the models. A smoothing parameter of 1 for the feature counts seems optimal.
 
 
-## SVM
+## Ridge regression (L2)
 
-Linear predictive models estimation based on the LIBLINEAR C/C++ Library.
+Lasso and Ridge regression mainly differ in the penalty term. While Lasso uses an absolute value as a penalty term, Ridge uses the squared value.
 
-(Not running here to save time.)
+We estimate the L2-regularized logistic regression for our classification task (primal and dual).
 
-```{r svm}
+```{r tm-ridge}
+# textmodel_svm, type 0 (primal) and 7 (dual)
 
-# Five-fold cross-validation for every possible parameter combination
-# svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0:7)))
-# head(svm_eval)
-# 
-# aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
+# Ten-fold cross-validation for every possible parameter combination
+ridge_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0, 7)))
+head(ridge_eval)
+
+(ridge_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, ridge_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+
+ridge_eval_aggr$model <- "Ridge (L2)"
+
+# Add first row to overall dataframe
+tm_eval <- ridge_eval_aggr[1, ] %>% rbind.fill(tm_eval)
 
 
 ```
 
-None of the configurations lead to a higher accuracy compared to the benchmark NB model.
-
-Regarding the type of linear models, type 0 (L2-regularized logistic regression, primal) and 7 (L2-regularized logistic regression, dual) seem to provide optimal results. There is no clear pattern regarding the weights.
+The classifier does not provide a higher accuracy compared to the baseline NB model.
 
 The calculation of the models requires much more time/computing compared to the NB models.
 
 
-## Next algorithm...
+## Lasso regression (L1)
 
-```{r next-algorithm}
+We estimate the L1-regularized logistic regression for our classification task.
 
-# svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = 5, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq")))
-# head(svm_eval)
-# 
-# aggregate(cbind(accuracy, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy))
+```{r tm-lasso}
+# textmodel_svm, type 6
+
+# Ten-fold cross-validation for every possible parameter combination
+lasso_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6))
+head(lasso_eval)
+
+(lasso_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight, lasso_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+
+lasso_eval_aggr$model <- "Lasso (L1)"
+
+# Add first row to overall dataframe
+tm_eval <- lasso_eval_aggr[1, ] %>% rbind.fill(tm_eval)
 
 
 ```
+The classifier does not lead to a higher accuracy compared to the baseline NB model and to a slightly lower accuracy than the ridge classifier.
+
+The calculation of the models requires much more time/computing compared to the NB models.
+
+
+## Elastic Net
+
+The elastic net method combines the L1 and L2 penalties of the lasso and ridge methods (above).
+
+```{r tm-elasticnet}
+# Register multicore backend 
+registerDoMC(cores = 4) 
+
+elasticnet_eval <- cv.glmnet(x = dfmat,
+                   y = dfmat$issue_r1,
+                   family = "multinomial", 
+                   alpha = 0.5,
+                   nfolds = folds_cv,
+                   type.measure = "class",
+                   parallel = T,
+                   standardize = T)
+
+elasticnet_eval$lambda.min
+
+# Misclassification error
+print(elasticnet_eval$cvm %>% min) 
+
+# Accuracy
+print(1 - elasticnet_eval$cvm %>% min) 
+
+seed <- 1621447882
+set.seed(seed)
+
+# Estimate model
+# elastic_net_time <- system.time(elasticnet_mod <- glmnet(x = dfmat_training,
+#                    y = dfmat_training$issue_r1,
+#                    family = "multinomial", 
+#                    alpha = 0.5,
+#                    type.measure = "class",
+#                    standardize = T))
+
+elasticnet_mod <- glmnet(x = dfmat_training,
+                   y = dfmat_training$issue_r1,
+                   family = "multinomial",
+                   alpha = 0.5,
+                   type.measure = "class",
+                   standardize = T)
+
+# Get lambda with best accuracy
+elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfmat_test), type = "class")
+
+acc_list <- apply(elasticnet_pred, MARGIN = 2, FUN = function (x)  accuracy(x, dfmat_test$issue_r1))
+
+elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfmat_test), type = "class", s = elasticnet_mod$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
+
+tm_eval <- data.frame(accuracy = accuracy(elasticnet_pred, dfmat_test$issue_r1), 
+           precision = precision(elasticnet_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           recall = recall(elasticnet_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           f1_score = f1_score(elasticnet_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           # time = elastic_net_time,
+           seed = seed,
+           model = "Elastic net",
+           alpha = .5,
+           distribution = "multinomial") %>% 
+  rbind.fill(tm_eval)
+
+```
+
+The classifier does not provide a higher accuracy compared to the baseline NB model.
+
+The calculation of the models requires much more time/computing compared to the NB models.
+
+
+## SVM
+
+We estimate support vector classification (Crammer and Singer 2001) for our classification task.
+
+(Crammer, K. & Singer, Y. (2001). On the Algorithmic Implementation of Multiclass Kernel-based Vector Machines. Journal of Machine Learning Research, 2. 265-292.)
+
+```{r tm-svm}
+
+# textmodel_svm, type 4
+
+# Ten-fold cross-validation for every possible parameter combination
+svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4))
+head(svm_eval)
+
+(svm_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+
+svm_eval_aggr$model <- "SVM"
+
+# Add first row to overall dataframe
+tm_eval <- svm_eval_aggr[1, ] %>% rbind.fill(tm_eval)
+
+
+```
+
+None of the configurations lead to a higher accuracy compared to the baseline NB model.
+
+There is no clear pattern regarding the choice of weights.
+
+The calculation of the models requires more time/computing compared to the NB models.
+
+## Random Forest
+
+We estimate a model using the random forest algorithm for classification. We forgo cross-validation because OOB avoids over-classification.
+
+(Breiman, L. (2001), Random Forests, Machine Learning 45(1), 5-32.)
+
+```{r tm-randomforest}
+
+# Estimate model
+# randomforest_time <- system.time(randomforest_eval <-  randomForest(x = as.matrix(dfmat_training), 
+#                    y = as.factor(dfmat_training$issue_r1),
+#                    xtest = as.matrix(dfmat_test),
+#                    ytest = as.factor(dfmat_test$issue_r1),
+#                    importance = T,
+#                    mtry = 20,
+#                    ntree = 200,
+#                    keep.forest = T,
+#                    type = "class"))
+randomforest_eval <-  randomForest(x = as.matrix(dfmat_training), 
+                   y = as.factor(dfmat_training$issue_r1),
+                   xtest = as.matrix(dfmat_test),
+                   ytest = as.factor(dfmat_test$issue_r1),
+                   importance = T,
+                   mtry = 20,
+                   ntree = 100,
+                   keep.forest = T,
+                   type = "class")
+
+randomforest_pred <- predict(randomforest_eval, newdata = as.matrix(dfmat_test), type = "class")
+
+# Accuracy
+print(accuracy(randomforest_pred, dfmat_test$issue_r1)) 
+
+tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, dfmat_test$issue_r1), 
+           precision = precision(randomforest_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           recall = recall(randomforest_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           f1_score = f1_score(randomforest_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           # time = randomforest_time,
+           seed = seed,
+           model = "Random forest",
+           alpha = .5,
+           distribution = "multinomial") %>% 
+  rbind.fill(tm_eval)
+
+
+```
+
+Random forest yields a lower accuracy than the baseline model and the computing time is much longer.
+
 
 # Ensemble methods: SuperLearner
 
@@ -191,101 +392,128 @@ Prepare the datasets for the python code chunk.
 # Get vector indicating training sample
 training <- !(1:ndoc(corp_press) %in% id_test)
 
-# Subset training sample and write
-if(!file.exists("../train_data.csv")) as.data.frame(as.matrix(dfm_trim(dfmat, min_docfreq = 15,
-                        max_docfreq=0.80*nrow(dfmat), verbose = T))) %>%
-  write.csv(train_data, "../train_data.csv")
+# Subset training and test sample and write
+if(!file.exists("../train.csv")) as.data.frame(as.matrix(dfmat_training, verbose = T)) %>%
+  write.csv(., "../train.csv")
+if(!file.exists("../test.csv")) as.data.frame(as.matrix(dfmat_test, verbose = T)) %>%
+  write.csv(., "../test.csv")
 
 # Get labels for training sample and write
-if(!file.exists("../train_labels.csv")) write.csv(dfmat$issue_r1, "../train_labels.csv")
+if(!file.exists("../train_val.csv")) write.csv(dfmat_training$issue_r1, "../train_val.csv")
+if(!file.exists("../test_val.csv")) write.csv(dfmat_test$issue_r1, "../test_val.csv")
 
 
+super_start <- Sys.time()
 ```
 
-Run the SuperLearner in Python.
+Run SuperLearner in Python. (Additionally running AdaBoost.)
 
 ```{python superlearner}
-# Load packages
+# Load pandas and numpy
 import pandas as pd
 import numpy as np
 
 # Load sklearn tools
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
 # Load classifiers
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import SVC
-from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import AdaBoostClassifier
-from sklearn.ensemble import BaggingClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.ensemble import ExtraTreesClassifier
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import MultinomialNB # 1
 from sklearn.naive_bayes import BernoulliNB
+from sklearn.linear_model import LogisticRegression # 2, 3 and 4 (logistic regression L2/L1 penalty and elastic net)
+from sklearn.svm import SVC # 5
+from sklearn.ensemble import RandomForestClassifier # 6
+from sklearn.ensemble import AdaBoostClassifier # 7
 
 # Load SuperLearner
 from mlens.ensemble import SuperLearner
 
-# create a list of base-models
+# Set params
+# super_folds = r.folds_cv
+super_folds = 10
+# super_tol = .005
+super_tol = .005
+
+# Create a list of base-models
 def get_models():
 	models = list()
 	models.append(MultinomialNB())
 	models.append(BernoulliNB())
-	models.append(LogisticRegression(solver = 'liblinear', max_iter = 200))
-	models.append(DecisionTreeClassifier())
-	models.append(SVC(gamma = 'scale', probability = True))
-	models.append(GaussianNB())
-	models.append(KNeighborsClassifier())
-	models.append(AdaBoostClassifier())
-	models.append(BaggingClassifier())
+	models.append(LogisticRegression(solver = 'liblinear', max_iter = 1000, tol = super_tol, penalty = "l2"))
+	models.append(LogisticRegression(solver = 'liblinear', max_iter = 1000, tol = super_tol, penalty = "l1"))
+	models.append(LogisticRegression(solver = 'saga', max_iter = 1000, penalty = 'elasticnet', l1_ratio = .5, multi_class = 'multinomial', random_state = np.random.seed(3027), tol = super_tol))
+	models.append(SVC(probability = True, tol = super_tol))
 	models.append(RandomForestClassifier())
-	models.append(ExtraTreesClassifier())
+	models.append(AdaBoostClassifier())
 	return models
 
-# create the super learner
+# Create the superlearner
 def get_super_learner(X):
-	ensemble = SuperLearner(scorer = None, folds = 5, shuffle = True, random_state = np.random.seed(3027), sample_size = len(train_val), n_jobs = -1, verbose = True)
-	
-	# add base models
-	models = get_models()
+	ensemble = SuperLearner(scorer = None, folds = super_folds, shuffle = True, random_state = np.random.seed(3027), sample_size = len(train_val), n_jobs = 1, verbose = True)
+	models = get_models() # Add base models
 	ensemble.add(models, proba = True)
-	
-	# add the meta model
-	ensemble.add_meta(LogisticRegression(solver = "lbfgs", max_iter = 200), proba = False)
+	ensemble.add_meta(LogisticRegression(solver = 'lbfgs', max_iter = 1000, tol = super_tol), proba = False) # Add the meta model
 	return ensemble
  
-# load press release data
-train_data = pd.read_csv("../train_data.csv", index_col = 0)
-train_labels = pd.read_csv("../train_labels.csv", index_col = 0)
+# Load press release data
+train = pd.read_csv("../train.csv", index_col = 0).values
+train_val = np.asarray([int(i) for i in pd.read_csv("../train_val.csv", index_col = 0).values])
 
-X = train_data.values # Documents are already in random order
-y = np.asarray([int(i) for i in train_labels.values])
+test = pd.read_csv("../test.csv", index_col = 0).values
+test_val = np.asarray([int(i) for i in pd.read_csv("../test_val.csv", index_col = 0).values])
 
-# create the inputs and outputs
+# Create the inputs and outputs
+# Split data
+print('Train', train.shape, train_val.shape, 'Test', test.shape, test_val.shape)
 
-# split data
-train, test, train_val, test_val = train_test_split(X, y, test_size = 0.20) # test_size = 0.50
-print('Train', train.shape, train_val, 'Test', test.shape, test_val.shape)
-
-# create the super learner
+# Create the super learner
 ensemble = get_super_learner(train)
 
-# fit the super learner
+# Fit the super learner
 ensemble.fit(train, train_val)
 
-# summarize base learners
+# Summarize base learners
 print(ensemble.data)
 
-# make predictions on hold out set
-test_hat = ensemble.predict(test)
+# Make predictions on test data
+super_pred = ensemble.predict(test)
 
-print('Super Learner: %.3f' % (accuracy_score(test_val, test_hat) * 100))
+print('Super Learner: %.3f' % (accuracy_score(test_val, super_pred) * 100))
+
+```
+
+```{r superlearner-r}
+
+# tm_eval <- data.frame(accuracy = accuracy(super_pred, dfmat_test$issue_r1), 
+#            precision = precision(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+#            recall = recall(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+#            f1_score = f1_score(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+#            time = as.numeric(Sys.time() - super_start),
+#            model = "SuperLearner ensemble") %>% 
+#   rbind.fill(tm_eval)
+
 ```
 
 The SuperLearner does not significantly increase the accuracy.
+
+# Evaluation of textmodels
+
+In this section, we present a table for comparison of our textmodels.
+
+```{r  tm-eval}
+
+# Comparison of textmodels
+tm_eval[order(tm_eval$accuracy), ] %>% kbl(booktabs = T)
+
+# Naive Bayes baseline model
+baseline_nb <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
+
+# Confusion matrix and overall statistics
+table(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test)) %>%
+  confusionMatrix(mode = "everything")
+
+```
+
+<!--  Plots? -->
 
 # Classification of unlabelled data
 
@@ -295,15 +523,8 @@ We trained the models using a set of 2,742 labelled documents. In order to obtai
 
 ```{r unlabelled}
 
-tmod_nb_r1 <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
-
-dfmat_matched <- dfm_match(dfmat_test, 
-                           features = featnames(dfmat_training))
-
-actual_class <- docvars(dfmat_matched, "issue_r1")
-predicted_class <- predict(tmod_nb_r1, newdata = dfmat_matched)
-tab_class <- table(actual_class, predicted_class)
-tab_class
+# Naive Bayes with full labelled data
+tm_naivebayes <- textmodel_nb(dfmat, dfmat$issue_r1, distribution = "multinomial")
 
 # Loading full dataset from parent dir
 all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id))
@@ -326,9 +547,9 @@ docvars(dfmat_all, "id") <- all_germany$id
 dfmat_all <- dfm_match(dfmat_all, features = featnames(dfmat_training)) 
 
 # Predicting the issue category for all documents
-dfmat_all$issue_r1 <- predict(tmod_nb_r1, newdata = dfmat_all)
+dfmat_all$issue_r1 <- predict(tm_naivebayes, newdata = dfmat_all)
 
-table(dfmat_all$issue_r1)
+table(dfmat_all$issue_r1) %>% kbl(booktabs = T)
 
 ```
 
@@ -391,4 +612,6 @@ plot_issue_party(7,  "spd_fraktion") # There seems to be a decline since Fukushi
 plot_issue_party(10,  "spd_fraktion") # There seems to be a lower emphasis on welfare after the entry into government in fall 2013.
 
 
+# Time needed to run script
+print(Sys.time() - start_time) 
 ```
