@@ -554,7 +554,7 @@ tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "accuracy", "precisi
 
 if(!dir.exists("tables")) dir.create("tables")
 tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "accuracy", "precision", "recall", "f1_score")] %>% 
-  stargazer(out = "tables/tm_eval.tex")
+  stargazer(out = "tables/tm_eval.tex", stlye = "ajps", summary = F)
 
 # Naive Bayes baseline model
 baseline_nb <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
