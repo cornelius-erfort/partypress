@@ -219,7 +219,6 @@ Assuming a multinomial distribution of text features leads to a higher accuracy 
 
 There is no clear pattern in regard to the effect of the priors on the quality of the models. A smoothing parameter of 1 for the feature counts seems optimal.
 
-
 ## Ridge regression (L2)
 
 Lasso and Ridge regression mainly differ in the penalty term. While Lasso uses an absolute value as a penalty term, Ridge uses the squared value.
