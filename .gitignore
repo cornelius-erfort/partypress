@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 .DS_Store
+data
+scripts-issue-agendas.Rproj
+train-test-data
