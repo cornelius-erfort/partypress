@@ -11,12 +11,12 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
 
-```
 
+```
 
 # Setting up
 
-This script requires the files "sample_germany.dta" and "data_joint.RDS" in the parent directory. It also writes and reads two csv-files from the parent directory.
+This script requires the files "sample_germany.dta" and "data_joint.RDS" in the parent directory. It also writes and reads files from the parent directory.
 
 ## Loading packages
 
@@ -27,8 +27,6 @@ start_time <- Sys.time()
 
 packages <- c(
   "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "randomForest", "adabag", "kableExtra")
-
-# Using readstata13 because haven causes crash
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -42,9 +40,9 @@ invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = 
 
 ## Loading data
 
-The sample data for Germany consists of 2,742 labelled press releases. The dataset is not  on GitHub and is loaded from the parent directory here.
+The sample data for Germany consists of 2,740 labelled press releases. The dataset is not on GitHub and is loaded from the parent directory here.
 
-```{r data}
+```{r data, out.width = "80%"}
 
 sample_germany <- read.dta13("../sample_germany.dta", convert.factors = F)
 
@@ -53,11 +51,15 @@ sample_germany$issue[sample_germany$id == 229] <- 191
 sample_germany$issue[sample_germany$id == 731] <- 7
 sample_germany$issue[sample_germany$id == 902] <- 10
 
+sample_germany <- filter(sample_germany, date != "NA" | !is.na(text))
+nrow(sample_germany)
+
 # Subset to relevant vars
-germany_textpress <- sample_germany %>% select("header", "text", "issue", "position", "id", "party")
+germany_textpress <- sample_germany %>% select("header", "text", "issue", "position", "id", "party", "date")
 
 # Distribution of issues in the hand-coded sample
-table(germany_textpress$issue) %>% kbl(booktabs = T)
+table(germany_textpress$issue) %>% as.data.frame() %>% dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options="scale_down")
 
 ```
 
@@ -77,18 +79,35 @@ germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
                            `23` = 99) # Culture: Too few observations
                                                   )
 # Category descriptions
-issue_categories <- data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), issue_r1_descr = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", "Env. & Energy", "Immigration", "Welfare", "Law & Crime", "Commerce", "Defense", "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
+issue_categories <- 
+  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
+             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Env. & Energy", 
+                                "Immigration", "Welfare", "Law & Crime", "Commerce", "Defense", 
+                                "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
+
+issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
+  kbl(booktabs = T)
 
 # Distribution with merged categories
-table(germany_textpress$issue_r1) %>% kbl(booktabs = T)
+table(germany_textpress$issue_r1) %>% as.data.frame() %>% 
+  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options="scale_down")
 
 # Party names
-party_names <- data.frame(party = c(1:8), party_name = c("Bündnis 90/Die Grünen - Fraktion", "AfD - Bundesverband", "AfD - Fraktion", "FDP - Bundesverband", "FDP - Fraktion", "DIE LINKE - Fraktion", "SPD - Fraktion", "CDU/CSU - Fraktion"))
+party_names <- data.frame(party = c(1:8), 
+                          party_name = c("Bündnis 90/Die Grünen - Fraktion", 
+                                         "AfD - Bundesverband", "AfD - Fraktion", 
+                                         "FDP - Bundesverband", "FDP - Fraktion", "DIE LINKE - Fraktion", 
+                                         "SPD - Fraktion", "CDU/CSU - Fraktion"))
 germany_textpress <- merge(germany_textpress, party_names, by = "party")
 
 # Distribution by parties
-table(germany_textpress$party_name) %>% kbl(booktabs = T)
+table(germany_textpress$party_name) %>% as.data.frame() %>% 
+  dplyr::rename(party = Var1, n = Freq) %>% kbl(booktabs = T)
 
+table(germany_textpress$party_name, substr(germany_textpress$date, 6, 10)) %>% 
+  as.data.frame.matrix() %>% kbl(booktabs = T)
 
 ```
 
@@ -100,17 +119,18 @@ Subsequently, we follow standard procedures for the preparation of the document 
 
 
 ```{r dfm}
-corp_press <- str_c(germany_textpress$header, " ", germany_textpress$text) %>% corpus()
+
+if(file.exists("../dfmat.RData") & file.exists("../dfmat_training.RData") & file.exists("../dfmat_test.RData")) {
+  load("../dfmat.RData")
+  load("../dfmat_training.RData")
+  load("../dfmat_test.RData")
+  } else {
+  corp_press <- str_c(germany_textpress$header, " ", germany_textpress$text) %>% corpus()
 
 # Add id var to corpus
 docvars(corp_press, "id") <- germany_textpress$id
 docvars(corp_press, "issue_r1") <- germany_textpress$issue_r1
 docvars(corp_press, "party_name") <- germany_textpress$party_name
-
-# Create random sample for test dataset (size: 1/5 of all classified documents)
-set.seed(300)
-id_test <- sample(docvars(corp_press, "id"), 
-                  round(length(docvars(corp_press, "id"))/5, 0), replace = FALSE)
 
 # Create dfm
 dfmat <- corpus_subset(corp_press) %>%
@@ -125,18 +145,29 @@ dfmat <- corpus_subset(corp_press) %>%
            docfreq_type = "prop") %>%
   suppressWarnings()
 
-# Create training and test set 
-dfmat_training <- dfm_subset(dfmat, !(id %in% id_test))
-dfmat_test <- dfm_subset(dfmat, id %in% id_test)
-
 # Make order of documents random
 dfmat <- dfmat[sample(1:ndoc(dfmat), ndoc(dfmat)), ]
+save(dfmat, file = "../dfmat.RData")
+
+# Create random sample for test dataset (size: 1/5 of all classified documents)
+set.seed(300)
+id_test <- sample(docvars(dfmat, "id"), 
+                  round(length(docvars(dfmat, "id"))/5, 0), replace = FALSE)
+
+# Create training and test set 
+dfmat_training <- dfm_subset(dfmat, !(id %in% id_test))
+save(dfmat_training, file = "../dfmat_training.RData")
+dfmat_test <- dfm_subset(dfmat, id %in% id_test)
+save(dfmat_test, file = "../dfmat_test.RData")
+}
+
+
 
 ```
 
 # Textmodels
 
-Following Barbera et al. (2021) we estimate the following models:
+Following Barberá et al. (2021) we estimate the following models:
 
 1. Naive Bayes (multinomial)
 2. Ridge regression (L2)
@@ -160,16 +191,23 @@ We calculate a Multinomial Naive Bayes (NB) text classification model. Multinomi
 We also test whether a Bernoulli NB model potentially outperforms the multinomial one.
 
 ```{r tm-naivebayes}
+folds_cv <- 10 # Ten-fold cross-validation
 
-folds_cv <- 10
+# The textmodels are all saved in a directory. When the parameters are changed, the folder "textmodels" should be deleted in order to re-run the models.
 
 # Ten-fold cross-validation for every possible parameter combination
-naivebayes_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)))
-head(naivebayes_eval)
+if(!dir.exists("textmodels")) dir.create("textmodels")
+filename <- "textmodels/naivebayes_eval.RData"
+if(file.exists(filename)) load(filename) else {
+  naivebayes_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, 
+            model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"),
+            parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)))
+  save(naivebayes_eval, file = filename)
+}
 
-(naivebayes_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution + smooth, naivebayes_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+(naivebayes_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ prior + distribution + smooth, naivebayes_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
 
-naivebayes_eval_aggr$model <- "naive bayes"
+naivebayes_eval_aggr$model <- "Naive bayes"
 
 # Create a dataframe for all textmodels and save first row
 tm_eval <- data.frame()
@@ -189,13 +227,15 @@ Lasso and Ridge regression mainly differ in the penalty term. While Lasso uses a
 We estimate the L2-regularized logistic regression for our classification task (primal and dual).
 
 ```{r tm-ridge}
-# textmodel_svm, type 0 (primal) and 7 (dual)
-
 # Ten-fold cross-validation for every possible parameter combination
-ridge_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0, 7)))
-head(ridge_eval)
+filename <- "textmodels/ridge_eval.RData"
+if(file.exists(filename)) load(filename) else {
+  ridge_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), 
+      parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0, 7)))
+    save(ridge_eval, file = filename)
+}
 
-(ridge_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, ridge_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+(ridge_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type, ridge_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
 
 ridge_eval_aggr$model <- "Ridge (L2)"
 
@@ -215,13 +255,14 @@ The calculation of the models requires much more time/computing compared to the 
 We estimate the L1-regularized logistic regression for our classification task.
 
 ```{r tm-lasso}
-# textmodel_svm, type 6
-
 # Ten-fold cross-validation for every possible parameter combination
-lasso_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6))
-head(lasso_eval)
+filename <- "textmodels/lasso_eval.RData"
+if(file.exists(filename)) load(filename) else {
+  lasso_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6))
+  save(lasso_eval, file = filename)
+}
 
-(lasso_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight, lasso_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+(lasso_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight, lasso_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:2, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
 
 lasso_eval_aggr$model <- "Lasso (L1)"
 
@@ -243,7 +284,9 @@ The elastic net method combines the L1 and L2 penalties of the lasso and ridge m
 # Register multicore backend 
 registerDoMC(cores = 4) 
 
-elasticnet_eval <- cv.glmnet(x = dfmat,
+filename <- "textmodels/elasticnet_eval.RData"
+if(file.exists(filename)) load(filename) else {
+  elasticnet_eval <- cv.glmnet(x = dfmat,
                    y = dfmat$issue_r1,
                    family = "multinomial", 
                    alpha = 0.5,
@@ -251,6 +294,8 @@ elasticnet_eval <- cv.glmnet(x = dfmat,
                    type.measure = "class",
                    parallel = T,
                    standardize = T)
+  save(elasticnet_eval, file = filename)
+}
 
 elasticnet_eval$lambda.min
 
@@ -264,19 +309,19 @@ seed <- 1621447882
 set.seed(seed)
 
 # Estimate model
-# elastic_net_time <- system.time(elasticnet_mod <- glmnet(x = dfmat_training,
-#                    y = dfmat_training$issue_r1,
-#                    family = "multinomial", 
-#                    alpha = 0.5,
-#                    type.measure = "class",
-#                    standardize = T))
-
-elasticnet_mod <- glmnet(x = dfmat_training,
+filename <- "textmodels/elasticnet_mod.RData"
+if(file.exists(filename)) load(filename) else {
+  eval_start <- Sys.time()
+  elasticnet_mod <- glmnet(x = dfmat_training,
                    y = dfmat_training$issue_r1,
                    family = "multinomial",
                    alpha = 0.5,
                    type.measure = "class",
                    standardize = T)
+    elasticnet_mod$time <- as.numeric(Sys.time() - eval_start)
+save(elasticnet_mod, file = filename)
+}
+
 
 # Get lambda with best accuracy
 elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfmat_test), type = "class")
@@ -289,7 +334,7 @@ tm_eval <- data.frame(accuracy = accuracy(elasticnet_pred, dfmat_test$issue_r1),
            precision = precision(elasticnet_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
            recall = recall(elasticnet_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
            f1_score = f1_score(elasticnet_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
-           # time = elastic_net_time,
+           time = elasticnet_mod$time,
            seed = seed,
            model = "Elastic net",
            alpha = .5,
@@ -310,14 +355,14 @@ We estimate support vector classification (Crammer and Singer 2001) for our clas
 (Crammer, K. & Singer, Y. (2001). On the Algorithmic Implementation of Multiclass Kernel-based Vector Machines. Journal of Machine Learning Research, 2. 265-292.)
 
 ```{r tm-svm}
-
-# textmodel_svm, type 4
-
 # Ten-fold cross-validation for every possible parameter combination
-svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4))
-head(svm_eval)
+filename <- "textmodels/svm_eval.RData"
+if(file.exists(filename)) load(filename) else {
+  svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4))
+  save(svm_eval, file =  filename)
+}
 
-(svm_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% kbl(booktabs = T)
+(svm_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:3, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
 
 svm_eval_aggr$model <- "SVM"
 
@@ -340,18 +385,11 @@ We estimate a model using the random forest algorithm for classification. We for
 (Breiman, L. (2001), Random Forests, Machine Learning 45(1), 5-32.)
 
 ```{r tm-randomforest}
-
-# Estimate model
-# randomforest_time <- system.time(randomforest_eval <-  randomForest(x = as.matrix(dfmat_training), 
-#                    y = as.factor(dfmat_training$issue_r1),
-#                    xtest = as.matrix(dfmat_test),
-#                    ytest = as.factor(dfmat_test$issue_r1),
-#                    importance = T,
-#                    mtry = 20,
-#                    ntree = 200,
-#                    keep.forest = T,
-#                    type = "class"))
-randomforest_eval <-  randomForest(x = as.matrix(dfmat_training), 
+# Estimate model (100 trees)
+filename <- "textmodels/randomforest_eval.RData"
+if(file.exists(filename)) load(filename) else {
+  eval_start <- Sys.time()
+  randomforest_eval <-  randomForest(x = as.matrix(dfmat_training), 
                    y = as.factor(dfmat_training$issue_r1),
                    xtest = as.matrix(dfmat_test),
                    ytest = as.factor(dfmat_test$issue_r1),
@@ -360,6 +398,9 @@ randomforest_eval <-  randomForest(x = as.matrix(dfmat_training),
                    ntree = 100,
                    keep.forest = T,
                    type = "class")
+  randomforest_eval$time <- as.numeric(Sys.time() - eval_start)
+  save(randomforest_eval, file = filename)
+}
 
 randomforest_pred <- predict(randomforest_eval, newdata = as.matrix(dfmat_test), type = "class")
 
@@ -370,7 +411,7 @@ tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, dfmat_test$issue_r1
            precision = precision(randomforest_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
            recall = recall(randomforest_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
            f1_score = f1_score(randomforest_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
-           # time = randomforest_time,
+           time = randomforest_eval$time,
            seed = seed,
            model = "Random forest",
            alpha = .5,
@@ -382,55 +423,46 @@ tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, dfmat_test$issue_r1
 
 Random forest yields a lower accuracy than the baseline model and the computing time is much longer.
 
-
 # Ensemble methods: SuperLearner
 
 Prepare the datasets for the python code chunk.
 
 ```{r ensemble}
-
-# Get vector indicating training sample
-training <- !(1:ndoc(corp_press) %in% id_test)
-
-# Subset training and test sample and write
-if(!file.exists("../train.csv")) as.data.frame(as.matrix(dfmat_training, verbose = T)) %>%
-  write.csv(., "../train.csv")
-if(!file.exists("../test.csv")) as.data.frame(as.matrix(dfmat_test, verbose = T)) %>%
-  write.csv(., "../test.csv")
+# Write training and test samples to csv (for Python to read)
+if(!dir.exists("../train-test-data")) dir.create("../train-test-data") # Delete folder when training and test data should be chosen anew
+if(!file.exists("../train-test-data/train.csv")) as.data.frame(as.matrix(dfmat_training, verbose = T)) %>%
+  write.csv(., "../train-test-data/train.csv")
+if(!file.exists("../train-test-data/test.csv")) as.data.frame(as.matrix(dfmat_test, verbose = T)) %>%
+  write.csv(., "../train-test-data/test.csv")
 
 # Get labels for training sample and write
-if(!file.exists("../train_val.csv")) write.csv(dfmat_training$issue_r1, "../train_val.csv")
-if(!file.exists("../test_val.csv")) write.csv(dfmat_test$issue_r1, "../test_val.csv")
+if(!file.exists("../train-test-data/train_val.csv")) write.csv(dfmat_training$issue_r1, "../train-test-data/train_val.csv")
+if(!file.exists("../train-test-data/test_val.csv")) write.csv(dfmat_test$issue_r1, "../train-test-data/test_val.csv")
 
-
-super_start <- Sys.time()
 ```
 
 Run SuperLearner in Python. (Additionally running AdaBoost.)
 
 ```{python superlearner}
-# Load pandas and numpy
+# Load libraries
+import os
 import pandas as pd
 import numpy as np
-
-# Load sklearn tools
-from sklearn.metrics import accuracy_score
+import pickle as pk
+from sklearn.metrics import accuracy_score # Load sklearn tools
+from mlens.ensemble import SuperLearner # Load SuperLearner
 
 # Load classifiers
 from sklearn.naive_bayes import MultinomialNB # 1
 from sklearn.naive_bayes import BernoulliNB
-from sklearn.linear_model import LogisticRegression # 2, 3 and 4 (logistic regression L2/L1 penalty and elastic net)
+# 2, 3 and 4 (logistic regression L2/L1 penalty and elastic net)
+from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC # 5
 from sklearn.ensemble import RandomForestClassifier # 6
 from sklearn.ensemble import AdaBoostClassifier # 7
 
-# Load SuperLearner
-from mlens.ensemble import SuperLearner
-
 # Set params
-# super_folds = r.folds_cv
 super_folds = 10
-# super_tol = .005
 super_tol = .005
 
 # Create a list of base-models
@@ -438,9 +470,13 @@ def get_models():
 	models = list()
 	models.append(MultinomialNB())
 	models.append(BernoulliNB())
-	models.append(LogisticRegression(solver = 'liblinear', max_iter = 1000, tol = super_tol, penalty = "l2"))
-	models.append(LogisticRegression(solver = 'liblinear', max_iter = 1000, tol = super_tol, penalty = "l1"))
-	models.append(LogisticRegression(solver = 'saga', max_iter = 1000, penalty = 'elasticnet', l1_ratio = .5, multi_class = 'multinomial', random_state = np.random.seed(3027), tol = super_tol))
+	models.append(LogisticRegression(solver = 'liblinear', 
+	max_iter = 1000, tol = super_tol, penalty = "l2"))
+	models.append(LogisticRegression(solver = 'liblinear', 
+	max_iter = 1000, tol = super_tol, penalty = "l1"))
+	models.append(LogisticRegression(solver = 'saga', max_iter = 1000, 
+	penalty = 'elasticnet', l1_ratio = .5, multi_class = 'multinomial', 
+	random_state = np.random.seed(3027), tol = super_tol))
 	models.append(SVC(probability = True, tol = super_tol))
 	models.append(RandomForestClassifier())
 	models.append(AdaBoostClassifier())
@@ -448,52 +484,64 @@ def get_models():
 
 # Create the superlearner
 def get_super_learner(X):
-	ensemble = SuperLearner(scorer = None, folds = super_folds, shuffle = True, random_state = np.random.seed(3027), sample_size = len(train_val), n_jobs = 1, verbose = True)
+	ensemble = SuperLearner(scorer = None, folds = super_folds, shuffle = True, 
+	random_state = np.random.seed(3027), sample_size = len(train_val), 
+	n_jobs = 1, verbose = True)
 	models = get_models() # Add base models
 	ensemble.add(models, proba = True)
-	ensemble.add_meta(LogisticRegression(solver = 'lbfgs', max_iter = 1000, tol = super_tol), proba = False) # Add the meta model
+	ensemble.add_meta(LogisticRegression(solver = 'lbfgs', 
+	max_iter = 1000, tol = super_tol), proba = False) # Add the meta model
 	return ensemble
  
-# Load press release data
-train = pd.read_csv("../train.csv", index_col = 0).values
-train_val = np.asarray([int(i) for i in pd.read_csv("../train_val.csv", index_col = 0).values])
+# Load press release data (training and test)
+train = pd.read_csv("../train-test-data/train.csv", index_col = 0).values
+train_val = np.asarray([int(i) for i in pd.read_csv("../train-test-data/train_val.csv", 
+index_col = 0).values])
 
-test = pd.read_csv("../test.csv", index_col = 0).values
-test_val = np.asarray([int(i) for i in pd.read_csv("../test_val.csv", index_col = 0).values])
-
-# Create the inputs and outputs
-# Split data
-print('Train', train.shape, train_val.shape, 'Test', test.shape, test_val.shape)
+test = pd.read_csv("../train-test-data/test.csv", index_col = 0).values
+test_val = np.asarray([int(i) for i in pd.read_csv("../train-test-data/test_val.csv", 
+index_col = 0).values])
 
 # Create the super learner
 ensemble = get_super_learner(train)
 
 # Fit the super learner
-ensemble.fit(train, train_val)
+filename = "../superlearner.PyData"
+if os.path.exists(filename) != True:
+  ensemble.fit(train, train_val)
+  pk.dump(ensemble, open(filename, 'wb'))
+else:
+  ensemble = pk.load(open(filename, 'rb'))
 
 # Summarize base learners
 print(ensemble.data)
 
 # Make predictions on test data
-super_pred = ensemble.predict(test)
-
-print('Super Learner: %.3f' % (accuracy_score(test_val, super_pred) * 100))
+filename = "textmodels/super_pred.PyData"
+if os.path.exists(filename) != True:
+  super_pred = ensemble.predict(test)
+  pk.dump(super_pred, open(filename, 'wb'))
+  np.savetxt("textmodels/super_pred.csv", super_pred, delimiter = ",")
+else:
+  super_pred = pk.load(open(filename, 'rb'))
 
 ```
 
 ```{r superlearner-r}
+# Load superlearner prediction and add row to evaluation table
+super_pred <- read_csv("textmodels/super_pred.csv", col_names = F)[[1]] %>% as.numeric()
 
-# tm_eval <- data.frame(accuracy = accuracy(super_pred, dfmat_test$issue_r1), 
-#            precision = precision(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
-#            recall = recall(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
-#            f1_score = f1_score(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
-#            time = as.numeric(Sys.time() - super_start),
-#            model = "SuperLearner ensemble") %>% 
-#   rbind.fill(tm_eval)
+tm_eval <- data.frame(accuracy = accuracy(super_pred, dfmat_test$issue_r1),
+           precision = precision(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           recall = recall(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           f1_score = f1_score(super_pred, dfmat_test$issue_r1) %>% unlist() %>% mean(),
+           # time = as.numeric(Sys.time() - super_start),
+           model = "SuperLearner ensemble") %>%
+  rbind.fill(tm_eval)
 
 ```
 
-The SuperLearner does not significantly increase the accuracy.
+The SuperLearner does not significantly increase the accuracy, but the necessary computing time is much greater.
 
 # Evaluation of textmodels
 
@@ -502,7 +550,8 @@ In this section, we present a table for comparison of our textmodels.
 ```{r  tm-eval}
 
 # Comparison of textmodels
-tm_eval[order(tm_eval$accuracy), ] %>% kbl(booktabs = T)
+tm_eval[, c("accuracy", "precision", "recall", "f1_score")] <- apply(tm_eval[, c("accuracy", "precision", "recall", "f1_score")], MARGIN = 2, function (x) round(x, 3))
+tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "accuracy", "precision", "recall", "f1_score", "distribution")] %>% kbl(booktabs = T, row.names = F)
 
 # Naive Bayes baseline model
 baseline_nb <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
@@ -513,13 +562,19 @@ table(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test)) %>%
 
 ```
 
-<!--  Plots? -->
+The Naive Bayes model reaches a high accuracy of ~.64 which can only be slightly improved using an ensemble of classifiers (~.68). We thus rely on the NB classifier for the classification of press releases.
+
+Regarding the issues, the classifier works better for specific issue categories.
+While some have a higher than average sensitivity (e.g. 3 - Health, 5 - Labor, 6 - Education, 7 - Env. & Energy, 9 - Immigration, 191 - Int. Affairs), others fare worse than average (e.g. 15 - Commerce, 17 - Technology, 20 - Gov. Ops., 99 - Other). Unsurprisingly, the rather unspecifict categories 20 - Gov. Ops. and 99 - Other are difficult to predict. 
+
+The better sensitivity for other categories is likely the result of a more specific use of words. Category 17 - Technology may feature a worse accuracy because it is underrepresented in the labelled data. Category 15 - Commerce is often misclassified as 1 - Macroeconomics, 4 - Agriculture, 17 - Technology and 191 - Int. Affairs: All categories where a press release may contain similar words.
+
 
 # Classification of unlabelled data
 
 ## Using the NB textmodel
 
-We trained the models using a set of 2,742 labelled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labelled and unlabelled press releases in our sample.
+We trained the models using a set of 2,740 labelled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labelled and unlabelled press releases in our sample.
 
 ```{r unlabelled}
 
@@ -527,7 +582,8 @@ We trained the models using a set of 2,742 labelled documents. In order to obtai
 tm_naivebayes <- textmodel_nb(dfmat, dfmat$issue_r1, distribution = "multinomial")
 
 # Loading full dataset from parent dir
-all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id))
+all_germany <- read_rds("../data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id)) %>% filter(!is.na(date.x) & !is.na(text.x))
+nrow(all_germany)
 
 # Constructing the document frequency matrix
 dfmat_all <- corpus(str_c(all_germany$header, " ", all_germany$text.x)) %>% 
@@ -549,7 +605,9 @@ dfmat_all <- dfm_match(dfmat_all, features = featnames(dfmat_training))
 # Predicting the issue category for all documents
 dfmat_all$issue_r1 <- predict(tm_naivebayes, newdata = dfmat_all)
 
-table(dfmat_all$issue_r1) %>% kbl(booktabs = T)
+table(dfmat_all$issue_r1) %>% as.data.frame() %>% 
+  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options="scale_down")
 
 ```
 
@@ -594,24 +652,31 @@ plot_issue_party <- function(plot_issue, plot_party) ggplot(issue_agendas %>% fi
   geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 3, se = F) +
   theme(axis.text.x = element_text(angle = 45, hjust=1)) +
   scale_x_date(date_minor_breaks = "1 year") +
-  # ggtitle("Share of press releases for issue per quarter" %>% str_c(" (", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], " - ", plot_party, ")")) +
-  ggsave(str_c("plots/", plot_issue, " - ", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], "_", plot_party, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
-  ggsave(str_c("plots/", plot_issue, " - ", issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_", plot_party, ".png"), width = 5*2^.5, height = 5)
+  ggsave(str_c("plots/", plot_issue, " - ", 
+               issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue], "_", plot_party, ".pdf"), 
+         device = cairo_pdf, width = 5*2^.5, height = 5) +
+  ggsave(str_c("plots/", plot_issue, " - ", 
+               issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_", plot_party, ".png"), 
+         width = 5*2^.5, height = 5)
 
 
 # Plot quarterly issue attention for category "7 Environment & Energy" for "union_fraktion"
-plot_issue_party(7,  "union_fraktion") # There seems to be a decline since Fukushima in 2011.
+plot_issue_party(7,  "union_fraktion") 
+# There seems to be a decline since Fukushima in 2011.
 
 # Plot quarterly issue attention for category "9 Immigration" for "union_fraktion"
-plot_issue_party(9,  "union_fraktion") # There seems to be a peak around the so-called refugee crisis in 2015.
+plot_issue_party(9,  "union_fraktion") 
+# There seems to be a peak around the so-called refugee crisis in 2015.
 
 # Plot quarterly issue attention for category "7 Environment & Energy" for "spd_fraktion"
-plot_issue_party(7,  "spd_fraktion") # There seems to be a decline since Fukushima in 2011.
+plot_issue_party(7,  "spd_fraktion") 
+# There seems to be a decline since Fukushima in 2011.
 
 # Plot quarterly issue attention for category "10 Welfare" for "spd_fraktion"
-plot_issue_party(10,  "spd_fraktion") # There seems to be a lower emphasis on welfare after the entry into government in fall 2013.
+plot_issue_party(10,  "spd_fraktion") 
+# There seems to be a lower emphasis on welfare after the entry into government in fall 2013.
 
 
-# Time needed to run script
+# Time needed to run script (much shorter when textmodels are just loaded from a file)
 print(Sys.time() - start_time) 
 ```
