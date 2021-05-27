@@ -82,7 +82,7 @@ germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
 issue_categories <- 
   data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
              issue_r1_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Env. and Energy", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
                                 "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
                                 "Technology", "Government Operations.", "Other", "International Affairs", "EU"))
 
@@ -90,7 +90,11 @@ issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = iss
   kbl(booktabs = T)
 
 # Write latex table
-issue_categories %>% 
+issue_categories_out <- issue_categories[c(1:13, 16:17, 14:15), ]
+issue_categories_out$issue_r1 <- as.character(issue_categories_out$issue_r1)
+issue_categories_out$issue_r1[issue_categories_out$issue_r1 == "191"] <- "19.1"
+issue_categories_out$issue_r1[issue_categories_out$issue_r1 == "192"] <- "19.2"
+issue_categories_out %>% 
   dplyr::rename(Code = issue_r1, Topic = issue_r1_descr) %>%
   stargazer(out = "tables/issue_categories.tex", summary = F, rownames = F, title = "Categories used for classification", label = "tab:issue_categories")
 
