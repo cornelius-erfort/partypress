@@ -40,7 +40,7 @@ invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = 
 
 ## Loading data
 
-The sample data for Germany consists of 2,740 labelled press releases. The dataset is not uploaded on GitHub.
+The sample data for Germany consists of 2,740 labeled press releases. The dataset is not uploaded on GitHub.
 
 ```{r data, out.width = "80%"}
 
@@ -82,8 +82,8 @@ germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
 issue_categories <- 
   data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
              issue_r1_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Env. & Energy", 
-                                "Immigration", "Welfare", "Law & Crime", "Commerce", "Defense", 
+                                "Health", "Agriculture", "Labor", "Education", "Env. and Energy", 
+                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
                                 "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
 
 issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
@@ -92,7 +92,7 @@ issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = iss
 # Write latex table
 issue_categories %>% 
   dplyr::rename(Code = issue_r1, Topic = issue_r1_descr) %>%
-  stargazer(out = "tables/issue_categories.tex", summary = F, rownames = F, title = "")
+  stargazer(out = "tables/issue_categories.tex", summary = F, rownames = F, title = "Categories used for classification", label = "tab:issue_categories")
 
 # Distribution with merged categories
 table(germany_textpress$issue_r1) %>% as.data.frame() %>% 
@@ -576,18 +576,18 @@ The Naive Bayes model reaches a high accuracy of ~.64 which can only be slightly
 Regarding the issues, the classifier works better for specific issue categories.
 While some have a higher than average sensitivity (e.g. 3 - Health, 5 - Labor, 6 - Education, 7 - Env. & Energy, 9 - Immigration, 191 - Int. Affairs), others fare worse than average (e.g. 15 - Commerce, 17 - Technology, 20 - Gov. Ops., 99 - Other). Unsurprisingly, the rather unspecifict categories 20 - Gov. Ops. and 99 - Other are difficult to predict. 
 
-The better sensitivity for other categories is likely the result of a more specific use of words. Category 17 - Technology may feature a worse accuracy because it is underrepresented in the labelled data. Category 15 - Commerce is often misclassified as 1 - Macroeconomics, 4 - Agriculture, 17 - Technology and 191 - Int. Affairs: All categories where a press release may contain similar words.
+The better sensitivity for other categories is likely the result of a more specific use of words. Category 17 - Technology may feature a worse accuracy because it is underrepresented in the labeled data. Category 15 - Commerce is often misclassified as 1 - Macroeconomics, 4 - Agriculture, 17 - Technology and 191 - Int. Affairs: All categories where a press release may contain similar words.
 
 
-# Classification of unlabelled data
+# Classification of unlabeled data
 
 ## Using the NB textmodel
 
-We trained the models using a set of 2,740 labelled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labelled and unlabelled press releases in our sample.
+We trained the models using a set of 2,740 labeled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all 47,111 labeled and unlabeled press releases in our sample.
 
-```{r unlabelled}
+```{r unlabeled}
 
-# Naive Bayes with full labelled data
+# Naive Bayes with full labeled data
 tm_naivebayes <- textmodel_nb(dfmat, dfmat$issue_r1, distribution = "multinomial")
 
 # Loading full dataset from hidden dir
