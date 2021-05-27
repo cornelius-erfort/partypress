@@ -84,7 +84,7 @@ issue_categories <-
              issue_r1_descr = c("Macroeconomics", "Civil Rights", 
                                 "Health", "Agriculture", "Labor", "Education", "Env. and Energy", 
                                 "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
-                                "Technology", "Gov. Ops.", "Other", "Int. Aff.", "EU"))
+                                "Technology", "Government Operations.", "Other", "International Affairs", "EU"))
 
 issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
   kbl(booktabs = T)
