@@ -26,7 +26,7 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "randomForest", "adabag", "kableExtra", "stargazer")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -88,6 +88,11 @@ issue_categories <-
 
 issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
   kbl(booktabs = T)
+
+# Write latex table
+issue_categories %>% 
+  dplyr::rename(Code = issue_r1, Topic = issue_r1_descr) %>%
+  stargazer(out = "tables/issue_categories.tex", summary = F, rownames = F)
 
 # Distribution with merged categories
 table(germany_textpress$issue_r1) %>% as.data.frame() %>% 
@@ -554,8 +559,8 @@ tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "accuracy", "precisi
 
 if(!dir.exists("tables")) dir.create("tables")
 tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "accuracy", "precision", "recall", "f1_score")] %>% 
-  %>% dplyr::rename(Model = model, Accuracy = accuracy, Precision = precision, )
-  stargazer(out = "tables/tm_eval.tex", summary = F)
+  dplyr::rename(Model = model, Accuracy = accuracy, Precision = precision, Recall = recall, "F1 score" = f1_score) %>%
+  stargazer(out = "tables/tm_eval.tex", summary = F, rownames = F)
 
 # Naive Bayes baseline model
 baseline_nb <- textmodel_nb(dfmat_training, dfmat_training$issue_r1, distribution = "multinomial")
