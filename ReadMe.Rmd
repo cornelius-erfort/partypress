@@ -1,0 +1,333 @@
+---
+title: "ReadMe"
+author: "Cornelius Erfort"
+date: "5/24/2021"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
+```
+
+
+# Setting up
+
+This script requires the files "sample_germany.dta" and "data_joint.RDS" which are not included on GitHub. 
+
+## Loading packages
+
+
+```{r packages, message=FALSE, warning=FALSE, results='hide'}
+start_time <- Sys.time()
+
+packages <- c("dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "adabag", "kableExtra", "stargazer", "word2vec", "tokenizers", "ggforce", "concaveman")
+
+lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+
+if(!("readme" %in% rownames(installed.packages()))) {
+  remotes::install_github("iqss-research/readme-software/readme")
+} 
+
+if(!("tensorflow" %in% rownames(installed.packages()))) {
+  remotes::install_github("rstudio/tensorflow")
+} 
+
+invisible(lapply(c(packages, "readme", "tensorflow"), require, character.only = T))
+
+# tensorflow::install_tensorflow()
+
+# https://github.com/sueddeutsche/political-german-word-embeddings
+# https://deepset.ai/german-word-embeddings
+
+theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
+
+```
+
+## Loading data
+
+The sample data for Germany consists of 2,740 labelled press releases. The dataset is not uploaded on GitHub.
+
+```{r data, out.width = "80%"}
+
+# sample_germany <- read.dta13("data/sample_germany.dta", convert.factors = F)
+sample_germany <- read_rds("data/data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id)) %>% filter(!is.na(date.x) & !is.na(text.x)) %>% dplyr::rename(date = date.x, text = text.x, party = party.x)
+nrow(sample_germany)
+
+sample_germany$issue <- sample_germany$issue %>% as.character() %>% str_extract("[:digit:]{1,2}(a|b)?") %>% str_replace_all(c("a" = "1", "b" = 2)) %>% as.numeric()
+
+sample_germany <- filter(sample_germany, date != "NA" | !is.na(text))
+nrow(sample_germany)
+
+sample_germany <- sample_germany %>% filter(issue != 98 | is.na(issue))
+nrow(sample_germany)
+
+# Subset to relevant vars
+germany_textpress <- sample_germany %>% select("header", "text", "issue", "id", "party", "date")
+
+# Distribution of issues in the hand-coded sample
+table(germany_textpress$issue) %>% as.data.frame() %>% dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options = "scale_down")
+
+```
+
+## Merging categories
+
+In order to improve the classification, similar topics are merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
+
+```{r categories}
+germany_textpress$issue_r1 <- as.numeric(germany_textpress$issue)
+
+germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
+                           `8`  = 7,  # Environment & Energy
+                           `13` = 10, # Transportation & Welfare
+                           `14` = 10, # Housing & Welfare
+                           `18` = 15, # Foreign Trade and Domestic Commerce
+                           `23` = 99) # Culture: Too few observations
+                                                  )
+# Category descriptions
+issue_categories <- 
+  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
+             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
+                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
+                                "Technology", "Government Operations", "Other", "International Affairs", "EU"))
+
+issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
+  kbl(booktabs = T)
+
+# Distribution with merged categories
+table(germany_textpress$issue_r1) %>% as.data.frame() %>% 
+  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options = "scale_down")
+
+# Recode category 21
+germany_textpress$id[!is.na(germany_textpress$issue_r1) & germany_textpress$issue_r1 == 21]
+germany_textpress$issue_r1[!is.na(germany_textpress$issue_r1) & germany_textpress$id == 229] <- 191
+germany_textpress$issue_r1[!is.na(germany_textpress$issue_r1) & germany_textpress$id == 731] <- 7
+germany_textpress$issue_r1[!is.na(germany_textpress$issue_r1) & germany_textpress$id == 902] <- 10
+table(germany_textpress$issue_r1)
+
+# Party names
+party_names <- data.frame(party = c("90gruene_fraktion",
+                                    "afd_bundesverband", "afd_fraktion",
+                                    "fdp_bundesverband", "fdp_fraktion",
+                                    "linke_fraktion",
+                                    "spd_fraktion",
+                                    "union_fraktion"), 
+                          party_name = c("Bündnis 90/Die Grünen - Fraktion", 
+                                         "AfD - Bundesverband", "AfD - Fraktion", 
+                                         "FDP - Bundesverband", "FDP - Fraktion", "DIE LINKE - Fraktion", 
+                                         "SPD - Fraktion", "CDU/CSU - Fraktion"))
+germany_textpress <- merge(germany_textpress, party_names, by = "party")
+
+# Distribution by parties
+table(germany_textpress$party_name) %>% as.data.frame() %>% 
+  dplyr::rename(party = Var1, n = Freq) %>% kbl(booktabs = T)
+
+table(germany_textpress$party_name, substr(germany_textpress$date, 1, 4)) %>% 
+  as.data.frame.matrix() %>% kbl(booktabs = T)
+
+germany_textpress$htext <- str_c(germany_textpress$header, " ", germany_textpress$text)
+
+```
+
+```{r readme}
+## Generate a word vector summary for each document
+
+# Read raw vector data and create vector matrix (https://deepset.ai/german-word-embeddings)
+
+if(!("glove_ger" %in% ls())) if(file.exists("wordvectors/glove_ger.RData")) load ("wordvectors/glove_ger.RData") else {
+  glove_ger_raw <- scan(file = "wordvectors/GloVe-german.txt", what="", sep="\n")
+  source("functions.R")
+  glove_ger <- proc_pretrained_vec(glove_ger_raw)
+  glove_feat <- names(glove_ger)
+  glove_ger <- glove_ger %>% t()
+  save(glove_ger, file = "wordvectors/glove_ger.RData")
+
+}
+
+# Read other vector (https://github.com/sueddeutsche/political-german-word-embeddings)
+# pol_vec <- read.wordvectors("wordvectors/wp-19-iter-1.w2v", type = "txt") # Already in w2v format
+
+## Generate a word vector summary for all documents
+if(!("wordVec_summaries" %in% ls())) if(file.exists("wordvectors/wordVec_summaries.RData")) load ("wordvectors/wordVec_summaries.RData") else {
+  wordVec_summaries <- undergrad(
+  documentText = cleanme(germany_textpress$htext),
+  wordVecs = glove_ger %>% as.matrix)
+  save(wordVec_summaries, file = "wordvectors/wordVec_summaries.RData")
+}
+
+## Define five subsamples
+germany_textpress$cv_sample <- sample(1:5, nrow(germany_textpress), replace = T) # Change germany_textpress to wordVec_summaries
+
+
+if(!("readme_cv" %in% ls())) if(file.exists("wordvectors/readme_cv.RData")) load ("wordvectors/readme_cv.RData") else {
+  readme_cv <- list()
+for (i in unique(germany_textpress$cv_sample) %>% sort) {
+  # Estimate category proportions
+  set.seed(2138) # Set a seed if you choose
+  readme_cv[[i]] <- readme(dfm = wordVec_summaries, 
+                           labeledIndicator = ifelse(germany_textpress$cv_sample == i, 0, 1),
+                           categoryVec = germany_textpress$issue_r1,
+                           nCores = 2,
+                           nCores_OnJob = 2) %>% suppressWarnings()
+}
+  save(readme_cv, file = "wordvectors/readme_cv.RData")
+}
+
+
+
+```
+
+``` {r agg_eval}
+
+# Prediction estimate and truth in %
+agg_eval <- data.frame()
+for (i in unique(germany_textpress$cv_sample) %>% sort) {
+  readme.estimates <- readme_cv[[i]]
+  readme.estimates$point_readme
+  
+  agg_eval <- data.frame(
+    issue_r1 = attr(readme.estimates$point_readme, "names"), 
+    predicted = readme.estimates$point_readme %>% as.vector(),
+    truth = (table(germany_textpress$issue_r1[germany_textpress$cv_sample == i])/sum(table(germany_textpress$issue_r1[germany_textpress$cv_sample == i]))) %>% as.vector(),
+    cv_sample = i
+) %>% rbind.fill(agg_eval)
+  
+}
+
+# Difference in percentage points (positive values indicate an inflated prediction, i.e. we estimate a higher share for the category compared to the truth)
+agg_eval$difference <- agg_eval$predicted - agg_eval$truth
+agg_eval[, c(2:3, 5)] <- apply(agg_eval[, c(2:3, 5)], MARGIN = 2, function (x) round(x, 3))
+
+# Change and order labels
+agg_eval$issue_r1[agg_eval$issue_r1 == 191] <- 19.1
+agg_eval$issue_r1[agg_eval$issue_r1 == 192] <- 19.2
+agg_eval$issue_r1 <- as.factor(as.numeric(agg_eval$issue_r1))
+levels(agg_eval$issue_r1) <- str_c(levels(agg_eval$issue_r1), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+
+# Write latex table
+if(!dir.exists("tables")) dir.create("tables")
+agg_eval %>% dplyr::group_by(issue_r1) %>% 
+  dplyr::summarise(predicted = mean (predicted),
+            truth = mean(truth)) %>%
+  dplyr::rename(issue = issue_r1) %>% as.data.frame() %>%
+  stargazer(out = "tables/agg_eval_readme.tex", summary = F, rownames = F, title = "Evaluation of aggregate values (readme2)", label = "tab:agg_eval_readme", notes = "Mean values from five-fold cross-validation.")
+
+# Plot aggregate evaluation
+if(!dir.exists("plots")) dir.create("plots")
+agg_eval %>% dplyr::group_by(issue_r1) %>% 
+  dplyr::summarise(predicted = mean (predicted),
+            truth = mean(truth)) %>%
+  ggplot(aes(x = truth, y = predicted)) +
+  geom_abline(slope = 1, color = "grey") +
+  geom_point(shape = "O", aes(color = issue_r1)) +
+  geom_text(label = agg_eval$issue_r1 %>% levels %>% str_extract("[:digit:]{1,2}(\\.[:digit:])?"), 
+            nudge_x = .001, nudge_y = -.002, hjust = "left", 
+            color = "dark grey", size = 3, family = "LM Roman 10") +
+  ylim(c(0, .15)) + xlim(c(0, .15)) +
+  guides(color = guide_legend(ncol = 1)) +
+  labs(color = "Issue category", caption = "The plot shows the mean values from a five-fold cross-validation.") +
+  theme(legend.position = "right", 
+        aspect.ratio = 1, 
+        legend.text = element_text(size = 8),
+        legend.key.size =  unit(.9,"line")) +
+  ggsave("plots/agg_eval_readme.pdf", 
+         device = cairo_pdf, width = 4*2^.5, height = 4) +
+  ggsave("plots/agg_eval_readme.png", 
+         width = 4*2^.5, height = 4)
+
+
+```
+
+``` {r applied, message=FALSE, warning=FALSE, results='hide'}
+
+if(!dir.exists("readme")) dir.create("readme")
+
+# Unite parties
+germany_textpress$party <- germany_textpress$party %>% str_replace_all(c("union_fraktion" = "CDU/CSU", "spd_fraktion" = "SPD", "90gruene_fraktion" = "B'90/Die Grünen", "fdp_bundesverband" = "FDP", "fdp_fraktion" = "FDP", "linke_fraktion" = "DIE LINKE", "afd_bundesverband" = "AfD", "afd_fraktion" = "AfD"))
+
+# Make quarterly date
+germany_textpress$qdate <- as.character(germany_textpress$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
+min(germany_textpress$date) # "2010-01-01"
+max(germany_textpress$date) # "2019-07-18"
+
+readme_attention <- data.frame()
+
+# Go through parties
+# party <- unique(germany_textpress$party)[5] # Choose CDU/CSU for now
+for (party in unique(germany_textpress$party)) {
+  print(party)
+
+# Go through quarters
+for (qdate in unique(germany_textpress$qdate)) {
+  print(qdate %>% as.Date(origin = "1970-01-01"))
+  
+  if(sum((germany_textpress$party == party & germany_textpress$qdate == qdate)) == 0) next # Only continue if there are documents for party/time
+  
+  if(file.exists(str_c("readme/", party %>% str_replace_all("/", "-"), "_", qdate %>% as.Date(origin = "1970-01-01"), ".RData"))) { # Load if file exists
+    load(str_c("readme/", party %>% str_replace_all("/", "-"), "_", qdate %>% as.Date(origin = "1970-01-01"), ".RData"))
+  } else {
+    
+    # Subset corpus to party/time and run readme
+  readme_storage <- readme(dfm = wordVec_summaries[(germany_textpress$party == party & germany_textpress$qdate == qdate) | !is.na(germany_textpress$issue_r1), ], 
+                           labeledIndicator = ifelse(is.na(germany_textpress$issue_r1)[(germany_textpress$party == party & germany_textpress$qdate == qdate) | !is.na(germany_textpress$issue_r1)], 0, 1),
+                           categoryVec = germany_textpress$issue_r1[(germany_textpress$party == party & germany_textpress$qdate == qdate) | !is.na(germany_textpress$issue_r1)],
+                           nCores = 2,
+                           nCores_OnJob = 2) %>% suppressWarnings()
+  
+  # Save output to file
+  save(readme_storage, file = str_c("readme/", party %>% str_replace_all("/", "-"), "_", qdate %>% as.Date(origin = "1970-01-01"), ".RData"))
+  }
+  
+  readme_attention <- data.frame(
+    issue_r1 = attr(readme_storage$point_readme, "names"),
+    predicted = readme_storage$point_readme %>% as.vector(),
+    qdate = qdate  %>% as.Date(origin = "1970-01-01"),
+    party = party) %>% rbind.fill(readme_attention)
+  
+  # print(readme_storage$point_readme)
+}
+  
+}
+
+
+
+```
+
+
+
+
+
+Work in progress:
+
+``` {r agg_eval}
+
+readme_attention %>% filter(issue_r1 == 7 & party == "B'90/Die Grünen") %>%
+  ggplot(aes(x = qdate, y = predicted)) +
+  geom_step() + 
+  geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 3, se = F)
+
+
+readme_attention %>% filter(issue_r1 == 9) %>%
+  ggplot(aes(x = qdate, y = predicted)) +
+  geom_step() + 
+  geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 3, se = F)
+
+load("issue_agendas.RData")
+
+eval_merge <- merge(readme_attention, issue_agendas, by.x = c("party", "issue_r1", "qdate"), by.y = c("party", "issue_r1", "date")) %>% dplyr::rename(supervised = attention, readme = predicted)
+
+nrow(eval_merge)
+
+cor(eval_merge$readme, eval_merge$supervised)
+
+testmod <- lm(readme ~ 0 + supervised + party + issue_r1, eval_merge)
+summary(testmod)
+
+margins::cplot(testmod, "issue_r1", family = "LM Roman 10")
+
+```
