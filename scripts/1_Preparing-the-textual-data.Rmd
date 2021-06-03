@@ -1,0 +1,197 @@
+---
+title: "Preparing the textual data"
+author: "Cornelius Erfort"
+date: "6/3/2021"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
+knitr::opts_knit$set(root.dir = dirname(getwd()))
+
+```
+
+# Setting up
+
+This script requires the file "sample_germany.dta" which is not included on GitHub.
+
+## Loading packages
+
+This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
+
+```{r packages, message=FALSE, warning=FALSE, results='hide'}
+start_time <- Sys.time()
+
+packages <- c(
+  "quanteda", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "kableExtra", "stargazer")
+
+lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+invisible(lapply(packages, require, character.only = T))
+
+theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
+
+
+
+
+```
+
+## Loading data
+
+The sample data for Germany consists of 2,740 labeled press releases. The dataset is not uploaded on GitHub.
+
+```{r data, out.width = "80%"}
+
+sample_germany <- read.dta13("data/sample_germany.dta", convert.factors = F)
+
+# Correcting classification for three documents (cat 21)
+sample_germany$issue[sample_germany$id == 229] <- 191
+sample_germany$issue[sample_germany$id == 731] <- 7
+sample_germany$issue[sample_germany$id == 902] <- 10
+
+sample_germany <- filter(sample_germany, date != "NA" | !is.na(text))
+nrow(sample_germany)
+
+# Subset to relevant vars
+germany_textpress <- sample_germany %>% select("header", "text", "issue", "position", "id", "party", "date")
+
+# Remove non-thematic press releases
+germany_textpress <- germany_textpress %>% filter(issue != 98)
+
+# Distribution of issues in the hand-coded sample
+table(germany_textpress$issue) %>% as.data.frame() %>% dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options = "scale_down")
+
+```
+
+## Merging categories
+
+In order to improve the classification, similar topics are merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
+
+```{r categories}
+germany_textpress$issue_r1 <- as.numeric(germany_textpress$issue)
+
+# Merge categories
+germany_textpress <- germany_textpress %>% mutate(issue_r1 = recode(issue_r1,
+                           `8`  = 7,  # Environment & Energy
+                           `13` = 10, # Transportation & Welfare
+                           `14` = 10, # Housing & Welfare
+                           `18` = 15, # Foreign Trade and Domestic Commerce
+                           `23` = 99) # Culture: Too few observations
+                                                  )
+# Category descriptions
+issue_categories <- 
+  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
+             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
+                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
+                                "Technology", "Government Operations", "Other", "International Affairs", "EU"))
+save(issue_categories, file = "supervised-files/issue_categories.RData")
+
+issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
+  kbl(booktabs = T)
+
+# Write latex table
+if(!dir.exists("tables")) dir.create("tables")
+issue_categories_out <- issue_categories[c(1:13, 16:17, 14:15), ]
+issue_categories_out$issue_r1 <- as.character(issue_categories_out$issue_r1)
+issue_categories_out$issue_r1[issue_categories_out$issue_r1 == "191"] <- "19.1"
+issue_categories_out$issue_r1[issue_categories_out$issue_r1 == "192"] <- "19.2"
+latex_out <- capture.output(issue_categories_out %>% 
+  dplyr::rename(Code = issue_r1, Topic = issue_r1_descr) %>%
+  stargazer(out = "tables/issue_categories.tex", summary = F, rownames = F, 
+            title = "Issue categories used for classification", 
+            label = "tab:issue_categories"))
+
+
+# Distribution with merged categories
+table(germany_textpress$issue_r1) %>% as.data.frame() %>% 
+  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
+  kable_styling(latex_options="scale_down")
+
+# Party names
+party_names <- data.frame(party = c(1:8), 
+                          party_name = c("Bündnis 90/Die Grünen - Fraktion", 
+                                         "AfD - Bundesverband", "AfD - Fraktion", 
+                                         "FDP - Bundesverband", "FDP - Fraktion", "DIE LINKE - Fraktion", 
+                                         "SPD - Fraktion", "CDU/CSU - Fraktion"))
+germany_textpress <- merge(germany_textpress, party_names, by = "party")
+
+# Distribution by parties
+table(germany_textpress$party_name) %>% as.data.frame() %>% 
+  dplyr::rename(party = Var1, n = Freq) %>% kbl(booktabs = T)
+
+table(germany_textpress$party_name, substr(germany_textpress$date, 6, 10)) %>% 
+  as.data.frame.matrix() %>% kbl(booktabs = T)
+
+germany_textpress$htext <- str_c(germany_textpress$header, " ", germany_textpress$text)
+
+# Make order of documents random
+set.seed(4325)
+germany_textpress <- germany_textpress[sample(1:nrow(germany_textpress), nrow(germany_textpress)), ]
+germany_textpress$cv_sample <- sample(1:5, nrow(germany_textpress), replace = T)
+
+if(!file.exists("supervised-files/germany_textpress.RData")) save(germany_textpress, file = "supervised-files/germany_textpress.RData")
+
+```
+
+## Creating the document frequency matrix (dfm)
+
+We create a text corpus based on the header and text of each press release. We draw a random sample from the corpus to create a training and a test dataset. The test dataset consists of approx. one fifth of the documents.
+
+Subsequently, we follow standard procedures for the preparation of the document frequency matrix. First, we remove stopwords and stem the words in order to better capture the similarities across documents. Second, we remove all punctuation, numbers, symbols and URLs. In a last step, we remove all words occurring in less than 0.5% or more than 90% of documents.
+
+
+```{r dfm}
+if(!dir.exists("supervised-files/train-test")) dir.create("supervised-files/train-test")
+if(file.exists("supervised-files/train-test/dfmat.RData") & file.exists("supervised-files/train-test/dfmat_training.RData") & file.exists("supervised-files/train-test/dfmat_test.RData")) {
+  
+  load("supervised-files/train-test/dfmat.RData")
+  load("supervised-files/train-test/dfmat_training.RData")
+  load("supervised-files/train-test/dfmat_test.RData")
+  
+  } else {
+    
+  corp_press <- corpus(str_c(germany_textpress$header, " ", germany_textpress$text),
+                       docvars = select(germany_textpress, c(id, issue_r1, party_name, cv_sample)))
+
+# Create dfm
+dfmat <- corpus_subset(corp_press) %>%
+  dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
+      stem = T, 
+      remove_punct = T, 
+      remove_number = T, 
+      remove_symbols = T, 
+      remove_url = T) %>% 
+  dfm_trim(min_docfreq = 0.005, # Remove words occurring <.5% or > 80% of docs
+           max_docfreq = .9, 
+           docfreq_ = "prop") %>%
+  suppressWarnings()
+
+save(dfmat, file = "supervised-files/train-test/dfmat.RData")
+
+# Create training and test set (also as csv for Python)
+dfmat_training <- dfm_subset(dfmat, dfmat$cv_sample != 1)
+save(dfmat_training, file = "supervised-files/train-test/dfmat_training.RData")
+as.data.frame(as.matrix(dfmat_training, verbose = T)) %>%
+  write.csv(., "supervised-files/train-test/train.csv")
+write.csv(dfmat_training$issue_r1, "supervised-files/train-test/train_val.csv")
+
+dfmat_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
+as.data.frame(as.matrix(dfmat_test, verbose = T)) %>%
+  write.csv(., "supervised-files/train-test/test.csv")
+dfmat_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
+save(dfmat_test, file = "supervised-files/train-test/dfmat_test.RData")
+write.csv(dfmat_test$issue_r1, "supervised-files/train-test/test_val.csv")
+
+}
+```
+
+
+
+```{r script_eval}
+# Time needed to run script (much shorter when textmodels are just loaded from a file)
+print(Sys.time() - start_time) 
+```
