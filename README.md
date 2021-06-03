@@ -10,5 +10,6 @@ We calculate a Multinomial Naive Bayes text classification model and then aggreg
 *Issue attention of party CDU/CSU (Germany) to issue "9 - Immigration"*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/9 - Immigration_union_fraktion.png" width="60%">
 
-
+*Comparison of classificitation methods across 17 categories*
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/agg_eval_compare.png" width="60%">
 
