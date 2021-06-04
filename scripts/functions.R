@@ -85,7 +85,7 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
   guides(color = guide_legend(ncol = 1)) +
   labs(color = "Issue category", 
        caption = "The plot shows the mean values from a five-fold cross-validation.") +
-  theme(legend.position = "right", 
+  theme(legend.position = "right", # ifelse(method == "supervised", "left", "none"), 
         aspect.ratio = 1, 
         legend.text = element_text(size = 8),
         legend.key.size =  unit(.9,"line")) +

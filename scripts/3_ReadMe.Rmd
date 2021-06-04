@@ -161,7 +161,6 @@ latex_out <- capture.output(stargazer(agg_eval %>% dplyr::group_by(issue_r1) %>%
             notes = "Mean values from five-fold cross-validation."), 
   out = "tables/agg_eval_readme.tex"))
 
-
 # Plot aggregate evaluation
 if(!dir.exists("plots")) dir.create("plots")
 
