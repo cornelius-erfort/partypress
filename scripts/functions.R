@@ -65,7 +65,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   if(plot_issue == 9) {
     
     thisplot <- thisplot +
-      geom_vline(xintercept = ymd("2015-08-31"), color = "grey", lty = 3)
+      geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
     
     if(!facet) {
       thisplot <- thisplot +
@@ -80,7 +80,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   
   if(plot_issue == 7) {
     thisplot <- thisplot +
-      geom_vline(xintercept = c(ymd("2011-03-11"), ymd("2018-08-20")), color = "grey", lty = 3) 
+      geom_vline(xintercept = c(ymd("2011-03-11"), ymd("2018-08-20")), color = "dark grey", lty = 2) 
       
     if(!facet) {
       thisplot <- thisplot +
