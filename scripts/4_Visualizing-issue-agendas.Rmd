@@ -25,7 +25,7 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont")
+  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "ggrepel")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -123,9 +123,6 @@ As expected, the Greens regularly produce the highest share of press releases re
 
 # Compare readme2 to aggregated supervised
 
-
-Work in progress:
-
 ```{r agg_eval_compare, out.width = "80%"}
 # Comparing aggregate predictions
 load("supervised-files/agg_eval.RData")
@@ -144,10 +141,6 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
   geom_line(aes(group = issue_r1), col = 'gray') +
   geom_abline(slope = 1, color = "grey") +
   geom_point(aes(shape = method, color = method)) +
-  # geom_text(label = agg_eval$issue_r1 %>% 
-  #             str_extract("[:digit:]{1,2}(\\.[:digit:])?"), 
-  #           nudge_x = .001, nudge_y = -.002, hjust = "left", 
-  #           color = "dark grey", size = 3, family = "LM Roman 10")) +
   ylim(c(0, .15)) + xlim(c(0, .15)) +
   guides(color = guide_legend(ncol = 1)) +
   labs(color = "Method", shape = "Method",
@@ -161,8 +154,6 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
          device = cairo_pdf, width = 4*2^.5, height = 4) +
   ggsave("plots/agg_eval_compare.png", 
          width = 4*2^.5, height = 4)
-
-
 
 # Plotting aggregate evaluation in one plot
 ggplot(agg_eval, aes(x = truth, y = predicted)) +
@@ -179,7 +170,7 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
   guides(color = guide_legend(ncol = 1)) +
   labs(color = "Issue category", 
        caption = "The plot shows the mean values from a five-fold cross-validation.") +
-  theme(legend.position = "right", # ifelse(method == "supervised", "left", "none"), 
+  theme(legend.position = "right",
         aspect.ratio = 1, 
         text = element_text(size = 6),
         legend.key.size =  unit(.4,"line")) +
@@ -203,13 +194,17 @@ issue_agendas$method <- factor(issue_agendas$method, levels = c("supervised", "r
 
 # 7 Environment and Energy
 plot_issue_agenda(issue_agendas, 7,  unique(issue_agendas$party), T)
+plot_issue_agenda(issue_agendas, 7,  unique(issue_agendas$party), T)
 
 # 9 Immigration
 plot_issue_agenda(issue_agendas, 9,  unique(issue_agendas$party), T)
+plot_issue_agenda(issue_agendas, 9,  unique(issue_agendas$party), T)
+
+```
 
 
 
-
+```{r keyness_tables, out.width = "80%"}
 # Key words/features for classified topics
 load("supervised-files/train-test/dfmat.RData")
 tm_naivebayes <- textmodel_nb(dfmat, dfmat$issue_r1, distribution = "multinomial")

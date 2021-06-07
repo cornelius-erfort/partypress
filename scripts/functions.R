@@ -55,8 +55,9 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   thisplot <- ggplot(plot_data %>% filter(issue_r1 %in% plot_issue & party %in% plot_party), aes(x = date, y = attention)) +
     
     
-    theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-    scale_x_date(date_breaks = "1 year", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          text = element_text(size = 12)) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
 ) +
     ylab("Share of press releases per quarter") +
     ylim(c(0, NA))
@@ -76,9 +77,6 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
     }
     
   }
-    
-  
-  
   
   if(plot_issue == 7) {
     thisplot <- thisplot +
@@ -110,8 +108,8 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
         geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .8)
     } else 
       thisplot <- thisplot +
-        # geom_smooth(method = "loess", formula = "y ~ x", se = F, aes(color = method, lty = method)) +
-        geom_step(aes(color = method, lty = method), alpha = .8)
+        geom_step(aes(color = method, lty = method), alpha = .8) +
+        theme(legend.position = "bottom")
   }
   
   if(facet) thisplot <- thisplot + facet_wrap(~ party)
@@ -134,7 +132,7 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
   guides(color = guide_legend(ncol = 1)) +
   labs(color = "Issue category", 
        caption = "The plot shows the mean values from a five-fold cross-validation.") +
-  theme(legend.position = "right", # ifelse(method == "supervised", "left", "none"), 
+  theme(legend.position = "bottom", # ifelse(method == "supervised", "left", "none"), 
         aspect.ratio = 1, 
         legend.text = element_text(size = 8),
         legend.key.size =  unit(.9,"line")) +
