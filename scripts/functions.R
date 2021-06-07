@@ -45,7 +45,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
                     ifelse(length(plot_party) == 1,  plot_party %>% str_replace_all("/", "-"), "all-parties"), "_",
                     ifelse(facet, "facet_", ""),
                     ifelse("method" %in% names(plot_data), "compare", ""),
-                    deparse(substitute(plot_data)) %>% str_extract("(supervised)|(readme)")
+                    deparse(substitute(plot_data)) %>% str_extract("(supervised)|(readme)|()")
                     )
   
   print(filename)
@@ -100,7 +100,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
     thisplot <- thisplot +
     geom_smooth(method = "loess", formula = "y ~ x", lty = 1, se = F, aes(color = party), alpha = .8) +
     theme(legend.position = "bottom") +
-    scale_color_manual(values = party_colors <- c("blue", "green", "black", "purple", "yellow", "red"))
+    scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red"))
   } else {
     if(!("method" %in% names(plot_data))) {
       thisplot <- thisplot +
@@ -112,13 +112,10 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
         geom_step(aes(color = method, lty = method), alpha = .8)
   }
   
-  if(facet) thisplot + facet_wrap(~ party)
-  
-  
-    
+  if(facet) thisplot <- thisplot + facet_wrap(~ party)
   
   thisplot +
-    ggsave(str_c("plots/pdf/", filename, ".pdf"), device = cairo_pdf(), width = 5*2^.5, height = 5) +
+    ggsave(str_c("plots/pdf/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
     ggsave(str_c("plots/png/", filename, ".png"), width = 5*2^.5, height = 5)
   
 }

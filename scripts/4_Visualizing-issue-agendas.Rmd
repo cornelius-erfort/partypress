@@ -126,11 +126,7 @@ As expected, the Greens regularly produce the highest share of press releases re
 
 Work in progress:
 
-```{undefined eval=FALSE, include=FALSE}
-issue_agendas <- merge(issue_agendas_supervised %>% dplyr::rename(attention_supervised = attention) %>% select(-c(issue_r1_descr)), issue_agendas_readme %>% dplyr::rename(attention_readme = attention), by = c("party", "issue_r1", "date"), all = T)
-
-issue_agendas %>% select(starts_with("att")) %>% cor() # r ~ .826
-
+```{r agg_eval_compare, out.width = "80%"}
 # Comparing aggregate predictions
 load("supervised-files/agg_eval.RData")
 agg_eval_supervised <- agg_eval
@@ -192,14 +188,13 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
          device = cairo_pdf, width = 3*2^.5, height = 3) +
   ggsave("plots/agg_eval_compare_facet.png",  
          width = 3*2^.5, height = 3)
+```
 
-
+```{r issue_agendas_compare, out.width = "80%"}
 # Plotting supervised and readme2
-plot_issue <- 7
-plot_party <- unique(issue_agendas$party)
-facet <- T
-data <- issue_agendas
+issue_agendas <- merge(issue_agendas_supervised %>% dplyr::rename(attention_supervised = attention) %>% select(-c(issue_r1_descr)), issue_agendas_readme %>% dplyr::rename(attention_readme = attention), by = c("party", "issue_r1", "date"), all = T)
 
+issue_agendas %>% select(starts_with("att")) %>% cor() # r ~ .826
 
 issue_agendas <- pivot_longer(issue_agendas, cols = starts_with("att"), values_to = "attention", names_to = "method")
 issue_agendas$method <- issue_agendas$method %>% str_remove("attention_")
@@ -211,6 +206,8 @@ plot_issue_agenda(issue_agendas, 7,  unique(issue_agendas$party), T)
 
 # 9 Immigration
 plot_issue_agenda(issue_agendas, 9,  unique(issue_agendas$party), T)
+
+
 
 
 # Key words/features for classified topics
