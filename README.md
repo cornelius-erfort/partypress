@@ -10,7 +10,7 @@ This repository contains the scripts for our textmodels. The underlying dataset 
 We calculate a Multinomial Naive Bayes text classification model and then aggregate the number of press releases per issue by quarter. In order to get a relative measure of issue attention for each party, we divide the number of issue-specific press releases by the total number of press releases by that party in each quarter. We define five folds for cross-validation. Our test dataset thus makes up 20% of documents.
 
 ### Readme2
-Additionally, we use the package <a href = "https://github.com/iqss-research/readme-software">readme2</a> by Jerzak et al. (2019) to estimate the proportion of press releases regarding each topic. We do so by defining five folds for cross-validation. Our test dataset thus makes up 20% of documents.
+Additionally, we use the package <a href = "https://github.com/iqss-research/readme-software">readme2</a> by Jerzak et al. (forthcoming) to estimate the proportion of press releases regarding each topic. We do so by defining five folds for cross-validation. Our test dataset thus makes up 20% of documents.
 
 In a first step, we vectorize our courpus using a pre-trained word vector (embeddings trained on German Wikipedia, source: https://deepset.ai/german-word-embeddings). Second, we generate vector summaries for all documents. Third, we run the readme function to obtain predictions about the proportions in our test data.
 
