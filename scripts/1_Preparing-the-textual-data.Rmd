@@ -101,9 +101,9 @@ issue_categories_out$issue_r1[issue_categories_out$issue_r1 == "191"] <- "19.1"
 issue_categories_out$issue_r1[issue_categories_out$issue_r1 == "192"] <- "19.2"
 latex_out <- capture.output(issue_categories_out %>% 
   dplyr::rename(Code = issue_r1, Topic = issue_r1_descr) %>%
-  stargazer(out = "tables/issue_categories.tex", summary = F, rownames = F, 
+  stargazer(out = "tables/issue-categories.tex", summary = F, rownames = F, 
             title = "Issue categories used for classification", 
-            label = "tab:issue_categories"))
+            label = "tab:issue-categories"))
 
 
 # Distribution with merged categories

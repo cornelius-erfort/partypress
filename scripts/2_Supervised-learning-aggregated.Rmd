@@ -474,8 +474,8 @@ for (train_size in seq(.2, 1, .025)) {
 
 ggplot(nb_opt, aes(x = train_size, y = accuracy)) + 
   theme(text = element_text(size = 16)) +
-  geom_point(shape = 2) + 
   geom_smooth(method = "loess", formula = "y ~ x", se = F, lty = 2, color = "grey") +
+  geom_point(shape = 1) + 
   xlab("Share of full training dataset") +
   ggsave(str_c("plots/training-size-simulation.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
     ggsave(str_c("plots/training-size-simulation.png"), width = 5*2^.5, height = 5)
