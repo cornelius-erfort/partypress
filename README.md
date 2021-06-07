@@ -9,9 +9,13 @@ We calculate a Multinomial Naive Bayes text classification model and then aggreg
 
 ### Readme2
 
-*Issue attention over time of German parties to issue "9 - Immigration"*
-<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/pdf/9%20-%20Immigration_all-parties_facet_compare.png" width="60%">
+*Issue attention over time of German parties to issue "7 - Environment and Energy" using different classification methods*
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/png/7%20-%20Immigration_all-parties_facet_compare.png" width="60%">
 
-*Comparison of classificitation methods across 17 categories*
-<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/agg_eval_compare.png" width="60%">
+*Issue attention over time of German parties to issue "9 - Immigration" using different classification methods*
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/png/9%20-%20Immigration_all-parties_facet_compare.png" width="60%">
+
+
+*Comparison of classificitation methods across 17 categories  using different classification methods*
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="60%">
 
