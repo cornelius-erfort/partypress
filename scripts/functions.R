@@ -39,13 +39,15 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   if(is.null(plot_party)) plot_party <- unique(plot_data[, "party"])
   if(is.null(plot_issue)) plot_party <- unique(plot_data[, "issue_r1"])
   
+  methodname <- deparse(substitute(plot_data)) %>% str_extract("(supervised)|(readme)")
+  
   filename <- str_c(
                     ifelse(length(plot_issue) == 1, str_c(plot_issue, " - ", unique(plot_data$issue_r1_descr[plot_data$issue_r1 == plot_issue])), "all-issues"), 
                     "_", 
                     ifelse(length(plot_party) == 1,  plot_party %>% str_replace_all("/", "-"), "all-parties"), "_",
                     ifelse(facet, "facet_", ""),
                     ifelse("method" %in% names(plot_data), "compare", ""),
-                    deparse(substitute(plot_data)) %>% str_extract("(supervised)|(readme)|()")
+                    ifelse(!is.na(methodname), methodname, "")
                     )
   
   print(filename)
