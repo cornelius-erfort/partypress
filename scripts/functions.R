@@ -56,7 +56,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
     
     
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          text = element_text(size = 12)) +
+          text = element_text(size = 16)) +
     scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
 ) +
     ylab("Share of press releases per quarter") +

@@ -139,7 +139,7 @@ agg_eval$method <- factor(agg_eval$method, levels = c("supervised", "readme"))
 
 ggplot(agg_eval, aes(x = truth, y = predicted)) +
   geom_line(aes(group = issue_r1), col = 'gray') +
-  geom_abline(slope = 1, color = "grey") +
+  geom_abline(slope = 1, color = "light grey") +
   geom_point(aes(shape = method, color = method)) +
   ylim(c(0, .15)) + xlim(c(0, .15)) +
   guides(color = guide_legend(ncol = 1)) +
@@ -147,9 +147,9 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
        caption = "The plot shows the mean values from a five-fold cross-validation.") +
   theme(legend.position = "right", 
         aspect.ratio = 1, 
-        text = element_text(family = "LM Roman 10"), 
-        legend.text = element_text(size = 8),
-        legend.key.size =  unit(.9,"line")) +
+        text = element_text(family = "LM Roman 10", size = 12), 
+        legend.text = element_text(size = 12),
+        legend.key.size =  unit(1.1,"line")) +
   ggsave("plots/agg_eval_compare.pdf", 
          device = cairo_pdf, width = 4*2^.5, height = 4) +
   ggsave("plots/agg_eval_compare.png", 
@@ -157,11 +157,11 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
 
 # Plotting aggregate evaluation in one plot
 ggplot(agg_eval, aes(x = truth, y = predicted)) +
-  geom_abline(slope = 1, color = "grey") +
+  geom_abline(slope = 1, color = "light grey") +
   geom_text_repel(label = agg_eval$issue_r1 %>%
               str_extract("[:digit:]{1,2}(\\.[:digit:])?"),
               box.padding = .4,
-            color = "dark grey", size = 1.5, family = "LM Roman 10", 
+            color = "dark grey", size = 2, family = "LM Roman 10", 
             segment.size = .25, 
             min.segment.length = .1,
             point.padding = .15, max.overlaps = 100) +
@@ -172,8 +172,9 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
        caption = "The plot shows the mean values from a five-fold cross-validation.") +
   theme(legend.position = "right",
         aspect.ratio = 1, 
-        text = element_text(size = 6),
-        legend.key.size =  unit(.4,"line")) +
+        text = element_text(size = 7),
+        legend.key.size =  unit(.5,"line"),
+        legend.text = element_text(size = 5)) +
   facet_wrap(~ method) +
   ggsave("plots/agg_eval_compare_facet.pdf", 
          device = cairo_pdf, width = 3*2^.5, height = 3) +
