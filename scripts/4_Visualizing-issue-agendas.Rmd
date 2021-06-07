@@ -3,7 +3,8 @@ title: "Visualizing issue agendas"
 author: "Cornelius Erfort"
 date: "6/3/2021"
 output: 
-  pdf_documentdev: cairo_pdf
+  pdf_document:
+    dev: cairo_pdf
     toc: true
     number_sections: true
 ---
@@ -24,7 +25,7 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer")
+  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -32,6 +33,8 @@ invisible(lapply(packages, require, character.only = T))
 
 theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
 
+loadfonts()
+loadfonts(device = "pdf")
 source("scripts/functions.R")
 
 ```
@@ -41,7 +44,10 @@ source("scripts/functions.R")
 ```{r data}
 
 load("supervised-files/issue_agendas_supervised.RData")
+issue_agendas_supervised$date <- as.Date(issue_agendas_supervised$date, origin = "1970-01-01")
 load("readme-files/issue_agendas_readme.RData")
+issue_agendas_readme$date <- as.Date(issue_agendas_readme$date, origin = "1970-01-01")
+
 
 
 ```
@@ -121,53 +127,9 @@ As expected, the Greens regularly produce the highest share of press releases re
 Work in progress:
 
 ```{undefined eval=FALSE, include=FALSE}
-issue_agendas <- merge(issue_agendas_supervised %>% dplyr::rename(attention_supervised = attention), issue_agendas_readme %>% dplyr::rename(attention_readme = attention), by = c("party", "issue_r1", "date"), all = T)
+issue_agendas <- merge(issue_agendas_supervised %>% dplyr::rename(attention_supervised = attention) %>% select(-c(issue_r1_descr)), issue_agendas_readme %>% dplyr::rename(attention_readme = attention), by = c("party", "issue_r1", "date"), all = T)
 
 issue_agendas %>% select(starts_with("att")) %>% cor() # r ~ .826
-
-
-
-
-
-# Plotting supervised and readme2
-load("issue_agendas.RData")
-plot_issue <- 7
-ggplot(issue_agendas_readme %>% filter(issue_r1 %in% plot_issue), aes(x = date, y = attention)) +
-  geom_step(alpha = .4) +
-  geom_step(data = issue_agendas %>% filter(issue_r1 %in% plot_issue), color = "red", alpha = .4) + 
-    geom_smooth(data = issue_agendas %>% filter(issue_r1 %in% plot_issue), method = "loess", formula = "y ~ x", color = "pink", lty = 2, se = F) +
-  geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F) +
-  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-  # ylim(c(0., max(issue_agendas_readme$attention) + 0.05)) +
-  ylab("Share of press releases per quarter") +
-  facet_wrap(~ party) +
-  ggsave(str_c("plots/", plot_issue, " - ", 
-               issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_comparing methods.pdf"), 
-         device = cairo_pdf, width = 5*2^.5, height = 5) +
-  ggsave(str_c("plots/", plot_issue, " - ", 
-               issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_comparing methods.png"), 
-         width = 5*2^.5, height = 5)
-  
-plot_issue <- 9
-ggplot(issue_agendas_readme %>% filter(issue_r1 %in% plot_issue), aes(x = date, y = attention)) +
-  geom_step(alpha = .4) +
-  geom_step(data = issue_agendas %>% filter(issue_r1 %in% plot_issue), color = "red", alpha = .4) + 
-    geom_smooth(data = issue_agendas %>% filter(issue_r1 %in% plot_issue), method = "loess", formula = "y ~ x", color = "pink", lty = 2, se = F) +
-  geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F) +
-  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-  # ylim(c(0., max(issue_agendas_readme$attention) + 0.05)) +
-  ylab("Share of press releases per quarter") +
-  facet_wrap(~ party) +
-  ggsave(str_c("plots/", plot_issue, " - ", 
-               issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_comparing methods.pdf"), 
-         device = cairo_pdf, width = 5*2^.5, height = 5) +
-  ggsave(str_c("plots/", plot_issue, " - ", 
-               issue_categories$issue_r1_descr[issue_categories$issue_r1 == plot_issue],"_comparing methods.png"), 
-         width = 5*2^.5, height = 5)
-
-
 
 # Comparing aggregate predictions
 load("supervised-files/agg_eval.RData")
@@ -231,6 +193,24 @@ ggplot(agg_eval, aes(x = truth, y = predicted)) +
   ggsave("plots/agg_eval_compare_facet.png",  
          width = 3*2^.5, height = 3)
 
+
+# Plotting supervised and readme2
+plot_issue <- 7
+plot_party <- unique(issue_agendas$party)
+facet <- T
+data <- issue_agendas
+
+
+issue_agendas <- pivot_longer(issue_agendas, cols = starts_with("att"), values_to = "attention", names_to = "method")
+issue_agendas$method <- issue_agendas$method %>% str_remove("attention_")
+issue_agendas$method <- factor(issue_agendas$method, levels = c("supervised", "readme"))
+
+
+# 7 Environment and Energy
+plot_issue_agenda(issue_agendas, 7,  unique(issue_agendas$party), T)
+
+# 9 Immigration
+plot_issue_agenda(issue_agendas, 9,  unique(issue_agendas$party), T)
 
 
 # Key words/features for classified topics
