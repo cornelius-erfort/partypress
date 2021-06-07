@@ -18,6 +18,9 @@ In a first step, we vectorize our courpus using a pre-trained word vector (embed
 
 ## Results
 
+*Comparison of classificitation methods across 17 categories  using different classification methods*
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="60%">
+
 *Issue attention over time of German parties to issue "7 - Environment and Energy" using different classification methods*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/png/7%20-%20Environment%20and%20Energy_all-parties_facet_compare.png" width="60%">
 
@@ -25,6 +28,5 @@ In a first step, we vectorize our courpus using a pre-trained word vector (embed
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/png/9%20-%20Immigration_all-parties_facet_compare.png" width="60%">
 
 
-*Comparison of classificitation methods across 17 categories  using different classification methods*
-<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="60%">
+
 
