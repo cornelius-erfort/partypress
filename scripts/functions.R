@@ -142,7 +142,11 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
          width = 4*2^.5, height = 4)  
 
 
-resizebox.stargazer = function(..., tab.width = "!", tab.height = "!"
+width.stargazer <- function(x) {
+  str_replace(x, "\\begin\\{tabular\\}\\{\\@\\{\\extracolsep\\{5pt\\}\\} ccc\\}", "\\begin\\{tabularx\\}\\{\\textwidth\\}")
+}
+
+resizebox.stargazer = function(..., 
 ){
   #Activate str_which() function:
   require(stringr) 
@@ -153,19 +157,15 @@ resizebox.stargazer = function(..., tab.width = "!", tab.height = "!"
     stargazer::stargazer(...)
   )
   
-  #Render the arguments:
-  tab.width = tab.width
-  tab.height = tab.height
-  
   #Attach "}" between \end{tabular} and \end{table}
-  res = 
-    prepend(res, "}", before = length(res))
-  
+  # res = 
+  #   prepend(res, "}", before = length(res))
+
   #Input \resizebox before \begin{tabular}
   res = 
-    c(res[1:str_which(res, "^\\\\begin\\{tabular\\}.*")-1],
-      paste0("\\resizebox{",tab.width,"}{",tab.height,"}{%"),
-      res[str_which(res, "^\\\\begin\\{tabular\\}.*"):length(res)]
+    c(res[1:str_which(res, "^\\\\begin\\{tabularx\\}{\\textwidth}.*")-1],
+      # paste0("\\resizebox{",tab.width,"}{",tab.height,"}{%"),
+      res[str_which(res, "^\\\\begin\\{tabularx\\}{\\textwidth}.*"):length(res)]
     )
   
   #Produce the whole strings
