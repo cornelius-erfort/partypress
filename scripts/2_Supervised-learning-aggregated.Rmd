@@ -601,6 +601,7 @@ party_names <- data.frame(party = c("90gruene_fraktion",
                                          "SPD", "CDU/CSU"))
 docvars(dfmat_all) <- merge(docvars(dfmat_all), party_names, by = "party")
 
+
 save(dfmat_all, file = "supervised-files/dfmat_all.RData")
 
 # Tables for samples of press releases
@@ -609,7 +610,7 @@ latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "
   stargazer(type = "latex", summary = F, rownames = F, 
             title = "Sample of press releases classified as category 7 - Environment and Energy", label = "tab:7-document-samples"))
 
-latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{ssX") %>% cat(sep = "\n"), file = "tables/7-document-samples.tex")
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{stX") %>% cat(sep = "\n"), file = "tables/7-document-samples.tex")
  
 
 
@@ -618,7 +619,7 @@ latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "
   stargazer(type = "latex", summary = F, rownames = F, 
             title = "Sample of press releases classified as category 9 - Immigration", label = "tab:7-document-samples"))
 
-latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{ssX") %>% cat(sep = "\n"), file = "tables/9-document-samples.tex")
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{stX") %>% cat(sep = "\n"), file = "tables/9-document-samples.tex")
 
 
 
