@@ -607,12 +607,13 @@ save(dfmat_all, file = "supervised-files/dfmat_all.RData")
 # Environment
 latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "header"))[order(t(dfmat_all$issue_r1_prob)[colnames(dfmat_all$issue_r1_prob) == "7"], decreasing = T), ][1:1000, ][sample(1:100, 10), ] %>% dplyr::rename(party = party_name, title = header) %>%
   stargazer(out = "tables/7-document-samples.tex", summary = F, rownames = F, 
-            title = "Sample of press releases predicted with high probability as category 7 - Environment and Energy", label = "tab:7-document-samples"))
+            title = "Sample of press releases classified as category 7 - Environment and Energy", label = "tab:7-document-samples", 
+float.env = "table*"))
 
 # Immigration
 latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "header"))[order(t(dfmat_all$issue_r1_prob)[colnames(dfmat_all$issue_r1_prob) == "9"], decreasing = T), ][1:1000, ][sample(1:100, 10), ] %>% dplyr::rename(party = party_name, title = header) %>%
   stargazer(out = "tables/9-document-samples.tex", summary = F, rownames = F, 
-            title = "Sample of press releases predicted with high probability as category 9 - Immigratioon", label = "tab:7-document-samples"))
+            title = "Sample of press releases classified as category 9 - Immigratioon", label = "tab:7-document-samples"))
 
 
 
