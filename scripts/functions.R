@@ -140,4 +140,35 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
          device = cairo_pdf, width = 4*2^.5, height = 4) +
   ggsave(str_c("plots/agg_eval_", method, ".png"), 
          width = 4*2^.5, height = 4)  
+
+
+resizebox.stargazer = function(..., tab.width = "!", tab.height = "!"
+){
+  #Activate str_which() function:
+  require(stringr) 
+  require(purrr) 
+  
+  #Extract the code returned from stargazer()
+  res = capture.output(
+    stargazer::stargazer(...)
+  )
+  
+  #Render the arguments:
+  tab.width = tab.width
+  tab.height = tab.height
+  
+  #Attach "}" between \end{tabular} and \end{table}
+  res = 
+    prepend(res, "}", before = length(res))
+  
+  #Input \resizebox before \begin{tabular}
+  res = 
+    c(res[1:str_which(res, "^\\\\begin\\{tabular\\}.*")-1],
+      paste0("\\resizebox{",tab.width,"}{",tab.height,"}{%"),
+      res[str_which(res, "^\\\\begin\\{tabular\\}.*"):length(res)]
+    )
+  
+  #Produce the whole strings
+  cat(res, sep = "\n")
+}
   
