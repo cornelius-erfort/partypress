@@ -569,7 +569,7 @@ nrow(all_germany)
 
 # Constructing the document frequency matrix
 dfmat_all <- corpus(str_c(all_germany$header, " ", all_germany$text.x), 
-                    docvars = select(all_germany, c(party, date, id))) %>% 
+                    docvars = select(all_germany, c(party, date, id, header))) %>% 
   dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
       stem = T, 
       remove_punct = T, 
@@ -582,6 +582,7 @@ dfmat_all <- dfm_match(dfmat_all, features = featnames(dfmat))
 
 # Predicting the issue category for all documents
 dfmat_all$issue_r1 <- predict(tm_naivebayes, newdata = dfmat_all)
+dfmat_all$issue_r1_prob <- predict(tm_naivebayes, newdata = dfmat_all, type = "probability")
 
 table(dfmat_all$issue_r1) %>% as.data.frame() %>% 
   dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
@@ -589,7 +590,31 @@ table(dfmat_all$issue_r1) %>% as.data.frame() %>%
 
 table(dfmat_all$issue_r1) / ndoc(dfmat_all)
 
+# Party names
+party_names <- data.frame(party = c("90gruene_fraktion",
+                                    "afd_bundesverband", "afd_fraktion",
+                                    "fdp_bundesverband", "fdp_fraktion", "linke_fraktion",
+                                    "spd_fraktion", "union_fraktion"),
+                          party_name = c("Bündnis 90/Die Grünen", 
+                                         "AfD", "AfD", 
+                                         "FDP", "FDP", "DIE LINKE", 
+                                         "SPD", "CDU/CSU"))
+docvars(dfmat_all) <- merge(docvars(dfmat_all), party_names, by = "party")
+
 save(dfmat_all, file = "supervised-files/dfmat_all.RData")
+
+# Tables for samples of press releases
+# Environment
+latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "header"))[order(t(dfmat_all$issue_r1_prob)[colnames(dfmat_all$issue_r1_prob) == "7"], decreasing = T), ][1:1000, ][sample(1:100, 10), ] %>% dplyr::rename(party = party_name, title = header) %>%
+  stargazer(out = "tables/7-document-samples.tex", summary = F, rownames = F, 
+            title = "Sample of press releases predicted with high probability as category 7 - Environment and Energy", label = "tab:7-document-samples"))
+
+# Immigration
+latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "header"))[order(t(dfmat_all$issue_r1_prob)[colnames(dfmat_all$issue_r1_prob) == "9"], decreasing = T), ][1:1000, ][sample(1:100, 10), ] %>% dplyr::rename(party = party_name, title = header) %>%
+  stargazer(out = "tables/9-document-samples.tex", summary = F, rownames = F, 
+            title = "Sample of press releases predicted with high probability as category 9 - Immigratioon", label = "tab:7-document-samples"))
+
+
 
 ```
 
