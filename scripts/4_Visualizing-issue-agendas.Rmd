@@ -89,6 +89,34 @@ plot_issue_agenda(issue_agendas_supervised, 7,  unique(issue_agendas_supervised$
 # Immigration
 plot_issue_agenda(issue_agendas_supervised, 9,  unique(issue_agendas_supervised$party), F) 
 
+
+
+# Show spike in attention to immigration
+
+imm_att <- issue_agendas_supervised %>% filter(issue_r1 == 9) %>% filter()
+imm_att$time <- ""
+imm_att$time[imm_att$date >= ymd("2013-06-30") & imm_att$date <= ymd("2014-06-30")] <- "2013/2014" 
+imm_att$time[imm_att$date >= ymd("2015-06-30") & imm_att$date <= ymd("2016-06-30")] <- "2015/2016" 
+imm_att <- filter(imm_att, time != "")  %>% aggregate(attention ~ party + time, ., mean)
+
+setwd("/Users/cornelius/Desktop/SCRIPTS/GitHub/scripts-issue-agendas")
+filename <- "9 - Immigration_all-parties_facet_supervised-change"
+ggplot(imm_att, aes(x = time, y = attention)) +
+  theme(text = element_text(size = 14)) +
+  ylab("Share of press releases per quarter") +
+  geom_point(aes(color = party, shape = party)) +
+  geom_line(aes(group = party, color = party), lty = 2, alpha = .5) +
+  geom_text_repel(data = imm_att[imm_att$time == "2013/2014", ], aes(x = imm_att[imm_att$time == "2013/2014", "time"], y = imm_att[imm_att$time == "2013/2014", "attention"]), label = round(imm_att[imm_att$time == "2013/2014", "attention"], 2), hjust = "left", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, 
+            min.segment.length = .1,
+            point.padding = .5, max.overlaps = 100, nudge_x = -.25) +
+  geom_text_repel(data = imm_att[imm_att$time != "2013/2014", ], aes(x = imm_att[imm_att$time != "2013/2014", "time"], y = imm_att[imm_att$time != "2013/2014", "attention"]), label = round(imm_att[imm_att$time != "2013/2014", "attention"], 2), hjust = "right", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, 
+            min.segment.length = .1,
+            point.padding = .5, max.overlaps = 100, nudge_x = .25) +
+  scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red")) +
+  ggsave(str_c("plots/pdf/", filename, ".pdf"), device = cairo_pdf, width = 4*2^.5, height = 5) +
+  ggsave(str_c("plots/png/", filename, ".png"), width = 4*2^.5, height = 5)
+
+
 # Readme
 ## Plot for every party and two issues
 for(this_party in unique(issue_agendas_readme$party)) {

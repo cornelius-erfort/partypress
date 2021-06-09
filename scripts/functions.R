@@ -39,7 +39,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   if(is.null(plot_party)) plot_party <- unique(plot_data[, "party"])
   if(is.null(plot_issue)) plot_party <- unique(plot_data[, "issue_r1"])
   
-  methodname <- deparse(substitute(plot_data)) %>% str_extract("(supervised)|(readme)")
+  methodname <- deparse(substitute(plot_data)) %>% str_extract("(supervised_lag)|(readme_lag)|(supervised)|(readme)") %>% str_replace("_", "-")
   
   filename <- str_c(
                     ifelse(length(plot_issue) == 1, str_c(plot_issue, " - ", unique(plot_data$issue_r1_descr[plot_data$issue_r1 == plot_issue])), "all-issues"), 
@@ -59,8 +59,9 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
           text = element_text(size = 16)) +
     scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
 ) +
-    ylab("Share of press releases per quarter") +
-    ylim(c(0, NA))
+    ylab("Share of press releases per quarter")
+  
+  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
   
   if(plot_issue == 9) {
     
@@ -146,29 +147,4 @@ width.stargazer <- function(x) {
   str_replace(x, "\\begin\\{tabular\\}\\{\\@\\{\\extracolsep\\{5pt\\}\\} ccc\\}", "\\begin\\{tabularx\\}\\{\\textwidth\\}")
 }
 
-resizebox.stargazer = function(..., 
-){
-  #Activate str_which() function:
-  require(stringr) 
-  require(purrr) 
-  
-  #Extract the code returned from stargazer()
-  res = capture.output(
-    stargazer::stargazer(...)
-  )
-  
-  #Attach "}" between \end{tabular} and \end{table}
-  # res = 
-  #   prepend(res, "}", before = length(res))
-
-  #Input \resizebox before \begin{tabular}
-  res = 
-    c(res[1:str_which(res, "^\\\\begin\\{tabularx\\}{\\textwidth}.*")-1],
-      # paste0("\\resizebox{",tab.width,"}{",tab.height,"}{%"),
-      res[str_which(res, "^\\\\begin\\{tabularx\\}{\\textwidth}.*"):length(res)]
-    )
-  
-  #Produce the whole strings
-  cat(res, sep = "\n")
-}
   
