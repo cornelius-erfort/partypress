@@ -92,31 +92,28 @@ plot_issue_agenda(issue_agendas_supervised, 9,  unique(issue_agendas_supervised$
 
 
 # Show spike in attention to immigration
-
-spec_att <- issue_agendas_supervised %>% filter(issue_r1 %in% c(7, 9) & party != "AfD")
+spec_att <- issue_agendas_supervised %>% filter(issue_r1 %in% c(7, 9)) # & party != "AfD")
 spec_att$time <- ""
-spec_att$time[spec_att$date >= ymd("2015-01-01") & spec_att$date <= ymd("2015-12-31")] <- "2015" 
-spec_att$time[spec_att$date >= ymd("2011-01-01") & spec_att$date <= ymd("2011-12-31")] <- "2011" 
+spec_att$time[spec_att$date >= ymd("2015-01-01") & spec_att$date <= ymd("2015-12-31") & spec_att$issue_r1 == 9] <- "2015" 
+spec_att$time[spec_att$date >= ymd("2014-01-01") & spec_att$date <= ymd("2014-12-31") & spec_att$issue_r1 == 9] <- "2014"
+spec_att$time[spec_att$date >= ymd("2013-01-01") & spec_att$date <= ymd("2013-12-31") & spec_att$issue_r1 == 7] <- "2013" 
+spec_att$time[spec_att$date >= ymd("2012-01-01") & spec_att$date <= ymd("2012-12-31") & spec_att$issue_r1 == 7] <- "2012" 
+# spec_att$time[spec_att$date >= ymd("2011-01-01") & spec_att$date <= ymd("2011-12-31") & spec_att$issue_r1 == 7] <- "2011" 
 spec_att <- filter(spec_att, time != "")  %>% aggregate(attention ~ party + time + issue_r1, ., mean)
 spec_att$issue_r1[spec_att$issue_r1 == 7] <- "7 - Environment and Energy"
 spec_att$issue_r1[spec_att$issue_r1 == "9"] <- "9 - Immigration"
 
-
-setwd("/Users/cornelius/Desktop/SCRIPTS/GitHub/scripts-issue-agendas")
 filename <- "all-parties_facet_supervised-change"
+setwd("/Users/cornelius/Desktop/SCRIPTS/GitHub/scripts-issue-agendas/")
 ggplot(spec_att, aes(x = time, y = attention)) +
   theme(text = element_text(size = 14)) +
   ylab("Share of press releases per quarter") +
   geom_point(aes(color = party, shape = party)) +
   geom_line(aes(group = party, color = party), lty = 2, alpha = .5) +
-  geom_text_repel(data = spec_att[spec_att$time %in% c("2011", "2013"), ], aes(x = spec_att[spec_att$time %in% c("2011", "2013"), "time"], y = spec_att[spec_att$time %in% c("2011", "2013"), "attention"]), label = round(spec_att[spec_att$time %in% c("2011", "2013"), "attention"], 2), hjust = "left", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, 
-            min.segment.length = .1,
-            point.padding = .5, max.overlaps = 100, nudge_x = -.25) +
-  geom_text_repel(data = spec_att[!(spec_att$time %in% c("2011", "2013")), ], aes(x = spec_att[!(spec_att$time %in% c("2011", "2013")), "time"], y = spec_att[!(spec_att$time %in% c("2011", "2013")), "attention"]), label = round(spec_att[!(spec_att$time %in% c("2011", "2013")), "attention"], 2), hjust = "right", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, 
-            min.segment.length = .1,
-            point.padding = .5, max.overlaps = 100, nudge_x = .25) +
-  scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red")) +
-  facet_wrap(~ issue_r1) +
+  geom_text_repel(data = spec_att[spec_att$time %in% c("2012", "2014"), ], aes(x = spec_att[spec_att$time %in% c("2012", "2014"), "time"], y = spec_att[spec_att$time %in% c("2012", "2014"), "attention"]), label = round(spec_att[spec_att$time %in% c("2012", "2014"), "attention"], 2), hjust = "left", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25,  min.segment.length = .1, point.padding = .5, max.overlaps = 100, nudge_x = -.25) +
+  geom_text_repel(data = spec_att[!(spec_att$time %in% c("2012", "2014")), ], aes(x = spec_att[!(spec_att$time %in% c("2012", "2014")), "time"], y = spec_att[!(spec_att$time %in% c("2012", "2014")), "attention"]), label = round(spec_att[!(spec_att$time %in% c("2012", "2014")), "attention"], 2), hjust = "right", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, min.segment.length = .1, point.padding = .5, max.overlaps = 100, nudge_x = .25) +
+  scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red")) + #"blue", 
+  facet_grid(~ issue_r1, scales = "free_x") +
   ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
   ggsave(str_c("plots/", filename, ".png"), width = 5*2^.5, height = 5)
 
