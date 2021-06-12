@@ -467,13 +467,14 @@ issue_eval <- data.frame(issue_r1 = dfmat_test$issue_r1, predicted = predict(bas
   merge(., data.frame(issue_r1 = table(dfmat_test$issue_r1) %>% rownames(),
            precision = precision(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test)),
            recall = recall(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test)),
-           f1_score = f1_score(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test))), by = "issue_r1") %>% dplyr::rename(f1_score = f1, issue = issue_r1)
-issue_eval[, c("accuracy", "precision", "recall", "f1_score")] <- issue_eval[, c("accuracy", "precision", "recall", "f1_score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 2))
+           f1_score = f1_score(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test))), by = "issue_r1") %>% 
+  dplyr::rename("Accuracy" =  accuracy, "Precision" = precision, "Recall" = recall, "F1 score" = f1, Issue = issue_r1)
+issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 2))
 
 # Change and order labels
-issue_eval$issue[issue_eval$issue == 191] <- 19.1
-issue_eval$issue[issue_eval$issue == 192] <- 19.2
-issue_eval$issue <- str_c(as.character(issue_eval$issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+issue_eval$Issue[issue_eval$Issue == 191] <- 19.1
+issue_eval$Issue[issue_eval$Issue == 192] <- 19.2
+issue_eval$Issue <- str_c(as.character(issue_eval$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
 issue_eval <- issue_eval[c(1:13, 16:17, 14:15), ]
 
 # Write latex table
