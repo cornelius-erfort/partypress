@@ -474,7 +474,7 @@ issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval[, c
 # Change and order labels
 issue_eval$Issue[issue_eval$Issue == 191] <- 19.1
 issue_eval$Issue[issue_eval$Issue == 192] <- 19.2
-issue_eval$Issue <- str_c(as.character(issue_eval$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+issue_eval$Issue <- str_c(as.character(issue_eval$Issue), " - ", issue_categories[, 2])
 issue_eval <- issue_eval[c(1:13, 16:17, 14:15), ]
 
 # Write latex table
