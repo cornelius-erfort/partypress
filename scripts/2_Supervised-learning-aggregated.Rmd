@@ -469,7 +469,7 @@ issue_eval <- data.frame(issue_r1 = dfmat_test$issue_r1, predicted = predict(bas
            recall = recall(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test)),
            f1_score = f1_score(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test))), by = "issue_r1") %>% 
   dplyr::rename("Accuracy" =  accuracy, "Precision" = precision, "Recall" = recall, "F1 score" = f1, Issue = issue_r1)
-issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 2))
+issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval[, c("Accuracy", "Precision", "Recall", "F1 score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 3))
 
 # Change and order labels
 issue_eval$Issue[issue_eval$Issue == 191] <- 19.1
