@@ -473,8 +473,8 @@ issue_eval[, c("accuracy", "precision", "recall", "f1_score")] <- issue_eval[, c
 # Change and order labels
 issue_eval$issue[issue_eval$issue == 191] <- 19.1
 issue_eval$issue[issue_eval$issue == 192] <- 19.2
-issue_eval$issue <- as.factor(as.numeric(issue_eval$issue))
-levels(issue_eval$issue) <- str_c(levels(issue_eval$issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+issue_eval$issue <- str_c(as.character(issue_eval$issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+issue_eval <- issue_eval[c(1:13, 16:17, 14:15), ]
 
 # Write latex table
 if(!dir.exists("tables")) dir.create("tables")
