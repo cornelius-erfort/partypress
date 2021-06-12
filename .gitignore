@@ -11,3 +11,5 @@ readme
 supervised-files
 readme-files
 semi-files
+scripts/plot_semi_supervised_newsgroups.ipynb
+scripts/.ipynb_checkpoints/plot_semi_supervised_newsgroups-checkpoint.ipynb
