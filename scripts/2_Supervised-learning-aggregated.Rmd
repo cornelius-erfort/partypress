@@ -479,7 +479,7 @@ levels(issue_eval$issue) <- str_c(levels(issue_eval$issue), " - ", issue_categor
 # Write latex table
 if(!dir.exists("tables")) dir.create("tables")
 latex_out <- capture.output(issue_eval %>%
-  stargazer(out = "tables/issue_eval_nb.tex", summary = F, rownames = F, 
+  stargazer(out = "tables/issue-eval-nb.tex", summary = F, rownames = F, 
             title = "Performance statistics by issue (Naive Bayes)", 
             label = "tab:issue_eval_nb"))
 
