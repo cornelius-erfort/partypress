@@ -143,8 +143,5 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
          width = 4*2^.5, height = 4)  
 
 
-width.stargazer <- function(x) {
-  str_replace(x, "\\begin\\{tabular\\}\\{\\@\\{\\extracolsep\\{5pt\\}\\} ccc\\}", "\\begin\\{tabularx\\}\\{\\textwidth\\}")
-}
 
   

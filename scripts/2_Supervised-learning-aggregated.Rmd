@@ -461,6 +461,34 @@ table(dfmat_test$issue_r1, predict(baseline_nb, newdata = dfmat_test)) %>%
   confusionMatrix(mode = "everything")
 
 
+#########
+dfmat_test$issue_r1 %>% table
+
+truth <- dfmat_test$issue_r1
+truth[truth == 191] <- 19.1
+truth[truth == 192] <- 19.2
+truth <- factor(truth, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+
+prediction <-predict(baseline_nb, newdata = dfmat_test) %>% as.numeric()
+prediction[prediction == 191] <- 19.1
+prediction[prediction == 192] <- 19.2
+prediction <- factor(prediction, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+
+(table(prediction, truth) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table
+
+latex_out <- capture.output(as.data.frame(unclass((table(prediction, truth) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table))
+ %>%
+  stargazer(summary = F,
+            title = "Confusion matrix for the test data (naive Bayes)", 
+            label = "tab:confusion-mat-nb"))
+
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} cccccccccccccccccc", "\\\\textwidth\\}\\{XXXXXXXXXXXXXXXXXX") %>% cat(sep = "\n"), file = "tables/confusion-mat-nb.tex")
+
+
+
+
 issue_eval <- data.frame(issue_r1 = dfmat_test$issue_r1, predicted = predict(baseline_nb, newdata = dfmat_test)) %>% 
   group_by(issue_r1) %>% 
   dplyr::mutate(accuracy = accuracy(issue_r1, predicted)) %>% select(-c("predicted")) %>% unique() %>%
