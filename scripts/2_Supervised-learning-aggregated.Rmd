@@ -670,7 +670,7 @@ latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx"
 # Immigration
 latex_out <- capture.output(select(docvars(dfmat_all), c("party_name", "date", "header"))[order(t(dfmat_all$issue_r1_prob)[colnames(dfmat_all$issue_r1_prob) == "9"], decreasing = T), ][1:1000, ][sample(1:100, 10), ] %>% dplyr::rename(party = party_name, title = header) %>%
   stargazer(type = "latex", summary = F, rownames = F, 
-            title = "Sample of press releases classified as category 9 - Immigration", label = "tab:7-document-samples"))
+            title = "Sample of press releases classified as category 9 - Immigration", label = "tab:9-document-samples"))
 
 latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{stX") %>% cat(sep = "\n"), file = "tables/9-document-samples.tex")
 
