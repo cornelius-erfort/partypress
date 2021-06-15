@@ -160,11 +160,20 @@ load("readme-files/agg_eval.RData")
 agg_eval_readme <- agg_eval
 agg_eval_supervised$method <- "supervised"
 agg_eval_readme$method <- "readme"
-agg_eval <- rbind(agg_eval_supervised, agg_eval_readme) %>% dplyr::group_by(method, issue_r1) %>% 
+
+agg_eval <- rbind(agg_eval_supervised, agg_eval_readme)
+
+# MSE of means from five-folds before CV
+agg_eval %>% group_by(method) %>% dplyr::summarise(SE = (truth-predicted)^2) %>% dplyr::summarise(M = across(SE, mean))
+
+agg_eval <- agg_eval %>% dplyr::group_by(method, issue_r1) %>% 
   dplyr::summarise(predicted = mean (predicted),
             truth = mean(truth)) %>% as.data.frame()
 
 agg_eval$method <- factor(agg_eval$method, levels = c("supervised", "readme"))
+
+# MSE of means from CV
+agg_eval %>% group_by(method) %>% dplyr::summarise(SE = (truth-predicted)^2) %>% dplyr::summarise(M = across(SE, mean))
 
 ggplot(agg_eval, aes(x = truth, y = predicted)) +
   geom_line(aes(group = issue_r1), col = 'gray') +
