@@ -618,6 +618,8 @@ tm_naivebayes <- textmodel_nb(dfmat, dfmat$issue_r1, distribution = "multinomial
 
 # Loading full dataset (not on GitHub)
 all_germany <- read_rds("data/data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id)) %>% filter(!is.na(date.x) & !is.na(text.x) & (issue != "98 Non-thematic" | is.na(issue))) %>% dplyr::rename(party = party.x, date = date.x)
+# all_germany <- read_rds("data/data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id, filepath, filename)) %>% filter(!is.na(date.x) & !is.na(text.x) & (issue != "98 Non-thematic" | is.na(issue))) %>% dplyr::rename(party = party.x, date = date.x)
+
 nrow(all_germany)
 
 # Constructing the document frequency matrix

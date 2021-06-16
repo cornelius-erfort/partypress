@@ -81,14 +81,10 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   
   if(plot_issue == 7) {
     thisplot <- thisplot +
-      geom_vline(xintercept = c(ymd("2011-03-11"), ymd("2018-08-20")), color = "dark grey", lty = 2) 
+      geom_vline(xintercept = c( ymd("2018-08-20")), color = "dark grey", lty = 2) 
       
     if(!facet) {
       thisplot <- thisplot +
-        geom_text(color = "grey", y =   0, x = ymd("2011-01-11"), 
-                  label = c('Fukushima'),
-                  family = "LM Roman 10",
-                  angle = 90, hjust = "left") + 
         geom_text(color = "grey", y = 0, x = ymd("2018-06-20"), 
                   label = c("Fridays for Future"),
                   family = "LM Roman 10",
