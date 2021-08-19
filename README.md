@@ -31,6 +31,7 @@ In a first step, we vectorize our courpus using a pre-trained word vector (embed
 
 *Accuracy for different sizes of the training data for three different models*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/training-size-simulation.png" width="80%">
+
 For the multi-lingual model, the size refers to the number of documents in the language of the test sample. The training data contained labeled documents in other languages.
 
 
