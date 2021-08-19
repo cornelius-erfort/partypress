@@ -1,6 +1,6 @@
 
 % Table created by stargazer v.5.2.2 by Marek Hlavac, Harvard University. E-mail: hlavac at fas.harvard.edu
-% Date and time: Thu, Aug 19, 2021 - 11:24:05
+% Date and time: Thu, Aug 19, 2021 - 11:28:57
 \begin{table}[!htbp] \centering 
   \caption{Confusion matrix for the test data (Transformers)} 
   \label{tab:confusion-mat-transfer} 

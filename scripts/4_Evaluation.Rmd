@@ -488,7 +488,7 @@ ggplot(three_agg, aes(x = truth, y = prediction)) +
             min.segment.length = .1,
             point.padding = .15, max.overlaps = 100) +
     geom_point(shape = "o", aes(color = Issue), alpha = .75) +
-  ylim(c(0, .15)) + xlim(c(0, .15)) +
+  ylim(c(0, .2)) + xlim(c(0, .2)) +
   guides(color = guide_legend(ncol = 3)) +
   labs(color = "Issue category") +
        # caption = "The plot shows predicted proportions from five folds."
