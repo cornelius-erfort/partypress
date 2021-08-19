@@ -23,12 +23,14 @@ In a first step, we vectorize our courpus using a pre-trained word vector (embed
 *Aggregated predictions across 17 categories*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="80%">
 
-*Issue attention over time of German parties to issue "7 - Environment and Energy"* 
+*Issue attention over time of German parties to issue "7 - Environment and Energy" (Transformers GBERT)* 
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/7%20-%20Environment%20and%20Energy_all-parties_facet.png" width="80%">
 
-*Issue attention over time of German parties to issue "9 - Immigration"*
+*Issue attention over time of German parties to issue "9 - Immigration" (Transformers GBERT)*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/9%20-%20Immigration_all-parties_facet.png" width="80%">
 
-
+*Accuracy for different sizes of the training data for three different models*
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/training-size-simulation.png" width="80%">
+For the multi-lingual model, the size refers to the number of documents in the language of the test sample. The training data contained labeled documents in other languages.
 
 
