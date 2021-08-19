@@ -24,7 +24,7 @@ We achieve the highest accuracy using Transformer models. For the German press r
 
 ## Results
 
-### Comparison of classificitation methods
+### Comparison of classification methods
 
 *Aggregated predictions across 17 categories*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="80%">
