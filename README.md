@@ -7,14 +7,20 @@ This repository contains the scripts for our textmodels. The underlying dataset 
 
 ### Supervised learning aggregated
 
-We calculate a Multinomial Naive Bayes text classification model and then aggregate the number of press releases per issue by quarter. In order to get a relative measure of issue attention for each party, we divide the number of issue-specific press releases by the total number of press releases by that party in each quarter. We define five folds for cross-validation. Our test dataset thus makes up 20% of documents.
+We optimize over a series of supervised text classification models and then aggregate the number of press releases per issue by quarter. In order to get a relative measure of issue attention for each party, we divide the number of issue-specific press releases by the total number of press releases by that party in each quarter. We define five folds for cross-validation. Our test dataset thus makes up 20% of documents.
 
 ### Readme2
-Additionally, we use the package <a href = "https://github.com/iqss-research/readme-software">readme2</a> by Jerzak et al. (forthcoming) to estimate the proportion of press releases regarding each topic. We do so by defining five folds for cross-validation. Our test dataset thus makes up 20% of documents.
+
+We use the package <a href = "https://github.com/iqss-research/readme-software">readme2</a> by Jerzak et al. (forthcoming) to estimate the proportion of press releases regarding each topic. We do so by defining five folds for cross-validation. Our test dataset thus makes up 20% of documents.
 
 In a first step, we vectorize our courpus using a pre-trained word vector (embeddings trained on German Wikipedia, source: https://deepset.ai/german-word-embeddings). Second, we generate vector summaries for all documents. Third, we run the readme function to obtain predictions about the proportions in our test data.
 
 (Jerzak, C. T., King, G., & Strezhnev, A. (forthcoming). An improved method of auto-mated nonparametric content analysis for social science. Political Analysis.)
+
+### Transformers models
+
+We achieve the highest accuracy using Transformer models. For the German press releases, we use GBERT. BETO works equally well for the Spanish press releases. We run a multi-lingual model that shows that using labeled German press releases achieves a high accuracy for the classification of Spanish press releases.
+
 
 ## Results
 
