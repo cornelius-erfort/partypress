@@ -45,7 +45,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
                     ifelse(length(plot_issue) == 1, str_c(plot_issue, " - ", unique(plot_data$issue_r1_descr[plot_data$issue_r1 == plot_issue])), "all-issues"), 
                     "_", 
                     ifelse(length(plot_party) == 1,  plot_party %>% str_replace_all("/", "-"), "all-parties"), "_",
-                    ifelse(facet, "facet_", ""),
+                    ifelse(facet, "facet", ""),
                     ifelse("method" %in% names(plot_data), "compare", ""),
                     ifelse(!is.na(methodname), methodname, "")
                     )
@@ -95,14 +95,26 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   
   if(!facet & length(plot_party) > 1)  {
     thisplot <- thisplot +
-    geom_smooth(method = "loess", formula = "y ~ x", lty = 1, se = F, aes(color = party), alpha = .8) +
+    # geom_smooth(method = "loess", formula = "y ~ x", lty = 1, se = F, aes(color = party), alpha = .3) +
+    geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .5,
+                linetype ="dashed",
+                alpha = 0.5,
+                se = F, aes(color = party)) +
     theme(legend.position = "bottom") +
     scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red"))
   } else {
     if(!("method" %in% names(plot_data))) {
       thisplot <- thisplot +
-        geom_step(alpha = .8) +
-        geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .8)
+        geom_step(color = "dark grey", alpha = .8) +
+        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
+        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .7,
+                linetype ="dashed",
+                alpha = 0.8, color = "black",
+                se = F)
+      
+      
     } else 
       thisplot <- thisplot +
         geom_step(aes(color = method, lty = method), alpha = .8) +
@@ -112,8 +124,8 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   if(facet) thisplot <- thisplot + facet_wrap(~ party)
   
   thisplot +
-    ggsave(str_c("plots/pdf/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
-    ggsave(str_c("plots/png/", filename, ".png"), width = 5*2^.5, height = 5)
+    ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
+    ggsave(str_c("plots/", filename, ".png"), width = 5*2^.5, height = 5)
   
 }
 
@@ -125,11 +137,11 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
   geom_text(label = agg_eval$issue_r1 %>% levels %>% str_extract("[:digit:]{1,2}(\\.[:digit:])?"), 
             nudge_x = .001, nudge_y = -.002, hjust = "left", 
             color = "dark grey", size = 3, family = "LM Roman 10") +
-  ylim(c(0, .15)) + xlim(c(0, .15)) +
+  ylim(c(0, .2)) + xlim(c(0, .2)) +
   guides(color = guide_legend(ncol = 1)) +
   labs(color = "Issue category", 
        caption = "The plot shows the mean values from a five-fold cross-validation.") +
-  theme(legend.position = "bottom", # ifelse(method == "supervised", "left", "none"), 
+  theme(legend.position = "right", # ifelse(method == "supervised", "left", "none"), 
         aspect.ratio = 1, 
         legend.text = element_text(size = 8),
         legend.key.size =  unit(.9,"line")) +

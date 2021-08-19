@@ -17,7 +17,7 @@ knitr::opts_knit$set(root.dir = dirname(getwd()))
 
 # Setting up
 
-This script requires the files "germany_textpress.RData" and "data_joint.RDS" which are not included on GitHub. 
+This script requires the files which are not included on GitHub.
 
 ## Loading packages
 
@@ -45,20 +45,26 @@ theme_update(text = element_text(family = "LM Roman 10")) # Set font family for 
 
 source("scripts/functions.R")
 
+if(!dir.exists("readme-files")) dir.create("readme-files")
 
 ```
 
 ## Loading the corpus
 
-The sample data for Germany consists of 2,740 labeled press releases. The dataset is not uploaded on GitHub.
+The sample data for Germany consists of 2,612 labeled press releases. The dataset is not uploaded on GitHub.
 
 In order to improve the classification, similar topics were merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
 
 The corpus is generated in the script "Preparing the textual data". We create a text corpus based on the header and text of each press release.
 
 ```{r data, out.width = "80%"}
-load("supervised-files/germany_textpress.RData")
-load("supervised-files/issue_categories.RData")
+load("readme-files/alldocs.RData")
+issue_categories <- 
+  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
+             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
+                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
+                                "Technology", "Government Operations", "Other", "International Affairs", "EU"))
 ```
 
 # Readme2: Calculating proportions
@@ -73,9 +79,7 @@ In a first step, we load a word vector (embeddings trained on German Wikipedia, 
 # Run readme for each fold
 if(!("readme_cv" %in% ls())) if(file.exists("readme-files/readme_cv.RData")) { # Load when file exists
   
-  load("readme-files/readme_cv.RData") 
-  
-  } else { # If not load word vector and calculate summaries
+  load("readme-files/readme_cv.RData") } else { # If not load word vector and calculate summaries
     
 if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordvectors/wordVec_summaries_labeled.RData")) {
   
@@ -95,19 +99,19 @@ if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordve
     
   ## Generate a word vector summary for all documents
     wordVec_summaries_labeled <- undergrad(
-    documentText = cleanme(germany_textpress$htext),
+    documentText = cleanme(alldocs$htext),
     wordVecs = glove_ger %>% as.matrix)
     save(wordVec_summaries_labeled, file = "readme-files/wordvectors/wordVec_summaries_labeled.RData")
   }
 
   readme_cv <- list()
-for (i in unique(germany_textpress$cv_sample) %>% sort) {
+for (i in unique(alldocs$cv_sample) %>% sort) {
   # Estimate category proportions
   set.seed(2138) # Set a seed if you choose
   readme_cv[[i]] <- readme(
     dfm = wordVec_summaries_labeled, 
-    labeledIndicator = ifelse(germany_textpress$cv_sample == i, 0, 1),
-    categoryVec = germany_textpress$issue_r1,
+    labeledIndicator = ifelse(alldocs$cv_sample == i, 0, 1),
+    categoryVec = alldocs$issue_r1,
     nCores = 2,
     nCores_OnJob = 2) %>% suppressWarnings()
 }
@@ -131,7 +135,7 @@ for (i in 1:length(readme_cv)) {
   agg_eval <- data.frame(
     issue_r1 = attr(readme.estimates$point_readme, "names"), 
     predicted = readme.estimates$point_readme %>% as.vector(),
-    truth = (table(germany_textpress$issue_r1[germany_textpress$cv_sample == i])/sum(table(germany_textpress$issue_r1[germany_textpress$cv_sample == i]))) %>% as.vector(),
+    truth = (table(alldocs$issue_r1[alldocs$cv_sample == i])/sum(table(alldocs$issue_r1[alldocs$cv_sample == i]))) %>% as.vector(),
     cv_sample = i
 ) %>% rbind.fill(agg_eval)
   
@@ -152,15 +156,15 @@ save(agg_eval, file = "readme-files/agg_eval.RData")
 
 # Write latex table
 if(!dir.exists("tables")) dir.create("tables")
-latex_out <- capture.output(stargazer(agg_eval %>% dplyr::group_by(issue_r1) %>% 
-  dplyr::summarise(predicted = mean (predicted),
-            truth = mean(truth)) %>%
-  dplyr::rename(issue = issue_r1) %>% as.data.frame() %>%
-  stargazer(summary = F, rownames = F, 
-            title = "Evaluation of aggregate values (readme2)", 
-            label = "tab:agg_eval_readme", 
-            notes = "Mean values from five-fold cross-validation."), 
-  out = "tables/agg_eval_readme.tex"))
+# latex_out <- capture.output(stargazer(agg_eval %>% dplyr::group_by(issue_r1) %>% 
+#   dplyr::summarise(predicted = mean (predicted),
+#             truth = mean(truth)) %>%
+#   dplyr::rename(issue = issue_r1) %>% as.data.frame() %>%
+#   stargazer(summary = F, rownames = F, 
+#             title = "Evaluation of aggregate values (readme2)", 
+#             label = "tab:agg_eval_readme", 
+#             notes = "Mean values from five-fold cross-validation."), 
+#   out = "tables/agg_eval_readme.tex"))
 
 # Plot aggregate evaluation
 if(!dir.exists("plots")) dir.create("plots")
