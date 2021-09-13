@@ -151,7 +151,7 @@ if(!dir.exists("supervised-files")) dir.create("supervised-files")
 if(file.exists("supervised-files/data/dfmat.RData")) load("supervised-files/data/dfmat.RData") else {
     
 corp_press <- corpus(str_c(textpress$header, " ", textpress$text),
-                       docvars = select(textpress, c(id, issue_r1, party_name, cv_sample)))
+                       docvars = select(textpress, c(id, issue, issue_r1, party_name, cv_sample)))
 
 # Create dfm
 dfmat <- corpus_subset(corp_press) %>%
@@ -210,7 +210,7 @@ names(alldocs)
 
 # Add labels and folds by id from textpress
 load("supervised-files/data/textpress.RData")
-alldocs <- merge(alldocs, select(textpress, c(id, issue_r1, cv_sample)), by = "id", all = T)
+alldocs <- merge(alldocs, select(textpress, c(id, issue, issue_r1, cv_sample)), by = "id", all = T)
 nrow(alldocs) # 44,950
 
 alldocs$cv_sample[is.na(alldocs$cv_sample)] <- -1

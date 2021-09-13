@@ -36,12 +36,13 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "remotes", "devtools", "pkgload")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
 if(!("quanteda.classifiers" %in% rownames(installed.packages()))) {
   remotes::install_github("quanteda/quanteda.classifiers")
+  # devtools::install_github("quanteda/quanteda.classifiers") 
 } 
 
 invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = T))
@@ -131,14 +132,14 @@ if(file.exists(filename)) load(filename) else {
 # Five-fold cross-validation for every possible parameter combination
 filename <- "supervised-files/textmodels/ridge_eval.RData"
 if(file.exists(filename)) load(filename) else {
-  ridge_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), 
+  ridge_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), 
       parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0, 7)))
   
   # Add alternative dfm (with bigrams and max_docfreq 20%)
-  ridge_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue_r1, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = c(0, 7))) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(ridge_eval)
+  ridge_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = c(0, 7))) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(ridge_eval)
   
     ridge_eval$model <- "Ridge (L2)"
-    save(ridge_eval, file = filename)
+    # save(ridge_eval, file = filename)
 }
 ```
 
