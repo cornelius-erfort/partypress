@@ -32,7 +32,7 @@ We achieve the highest accuracy using Transformer models. For the German press r
 *Issue attention over time of German parties to issue "7 - Environment and Energy" (Transformers GBERT)* 
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/7%20-%20Environment%20and%20Energy_all-parties_facet.png" width="80%">
 
-The vertical line indicates the start of the Friady for Future protests.
+The vertical line indicates the start of the Friday for Future protests.
 
 *Issue attention over time of German parties to issue "9 - Immigration" (Transformers GBERT)*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/9%20-%20Immigration_all-parties_facet.png" width="80%">
