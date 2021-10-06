@@ -68,15 +68,18 @@ See other script for the generation of the dfm.
 load("supervised-files/data/dfmat.RData")
 load("supervised-files/data/dfmat_alt.RData")
 
+# Category descriptions
 issue_categories <- 
-  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
-             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
-                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
-                                "Technology", "Government Operations", "Other", "International Affairs", "EU"))
+  data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 191:192), 
+             issue_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", 
+                                "Immigration", "Transportation", "Law and Crime", "Social Welfare",
+                             "Housing", "Domestic Commerce", "Defense", "Technology", 
+                             "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
+
 
 # Distribution with merged categories
-table(dfmat$issue_r1) %>% as.data.frame() %>% 
+table(dfmat$issue) %>% as.data.frame() %>% 
   dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
   kable_styling(latex_options = "scale_down")
 
@@ -148,10 +151,10 @@ if(elasticnet_opt_alt) {
 }
 
 
-tm_eval <- data.frame(accuracy = accuracy(elasticnet_pred, elastic_net_test$issue_r1), 
-           precision = precision(elasticnet_pred, elastic_net_test$issue_r1) %>% unlist() %>% mean(),
-           recall = recall(elasticnet_pred, elastic_net_test$issue_r1) %>% unlist() %>% mean(),
-           f1_score = f1_score(elasticnet_pred, elastic_net_test$issue_r1) %>% unlist() %>% mean(),
+tm_eval <- data.frame(accuracy = accuracy(elasticnet_pred, elastic_net_test$issue), 
+           precision = precision(elasticnet_pred, elastic_net_test$issue) %>% unlist() %>% mean(),
+           recall = recall(elasticnet_pred, elastic_net_test$issue) %>% unlist() %>% mean(),
+           f1_score = f1_score(elasticnet_pred, elastic_net_test$issue) %>% unlist() %>% mean(),
            time = elasticnet_mod$time,
            seed = elasticnet_mod$seed,
            weight = elasticnet_mod$weight,
@@ -181,10 +184,10 @@ if(randomforest_opt_alt) {
   randomforest_test <- dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)
 }
 
-tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$issue_r1), 
-           precision = precision(randomforest_pred, randomforest_test$issue_r1) %>% unlist() %>% mean(na.rm = T),
-           recall = recall(randomforest_pred, randomforest_test$issue_r1) %>% unlist() %>% mean(na.rm = T),
-           f1_score = f1_score(randomforest_pred, randomforest_test$issue_r1) %>% unlist() %>% mean(na.rm = T),
+tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$issue), 
+           precision = precision(randomforest_pred, randomforest_test$issue) %>% unlist() %>% mean(na.rm = T),
+           recall = recall(randomforest_pred, randomforest_test$issue) %>% unlist() %>% mean(na.rm = T),
+           f1_score = f1_score(randomforest_pred, randomforest_test$issue) %>% unlist() %>% mean(na.rm = T),
            time = randomforest_eval$time, seed = randomforest_eval$seed, model = randomforest_eval$model,
            weight = randomforest_eval$weight,
            alpha = .5, distribution = "multinomial") %>% 
@@ -193,57 +196,57 @@ tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$i
 # 7 SuperLearner
 # Load superlearner prediction and add row to evaluation table
 # super_pred <- read_csv("superlearner-files/super-pred.csv", col_names = F)[[1]] %>% as.numeric()
-# names(super_pred) <- c("prediction", "issue_r1", "cv_sample")
+# names(super_pred) <- c("prediction", "issue", "cv_sample")
 # supertime <- read_csv("superlearner-files/cv-time.txt", col_names = F, col_types = "n")[1,1] %>% as.numeric()
-# superlearner_test <- dfm_subset(dfmat_alt, dfmat$cv_sample == 1)$issue_r1
+# superlearner_test <- dfm_subset(dfmat_alt, dfmat$cv_sample == 1)$issue
 # 
-# tm_eval <- data.frame(accuracy = accuracy(super_pred$prediction, super_pred$issue_r1),
-#            precision = precision(super_pred$prediction, super_pred$issue_r1) %>% unlist() %>% mean(),
-#            recall = recall(super_pred$prediction, super_pred$issue_r1) %>% unlist() %>% mean(),
-#            f1_score = f1_score(super_pred$prediction, super_pred$issue_r1) %>% unlist() %>% mean(),
+# tm_eval <- data.frame(accuracy = accuracy(super_pred$prediction, super_pred$issue),
+#            precision = precision(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
+#            recall = recall(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
+#            f1_score = f1_score(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
 #            time = supertime,
 #            weight = "tfidf",
 #            seed = 1621447882,
 #            model = "SuperLearner ensemble") %>%
 #   rbind.fill(tm_eval)
 
-tm_eval <- data.frame(accuracy = 0.712,
-           time = 18,
-           weight = "tfidf",
-           seed = 1621447882,
-           model = "SuperLearner ensemble") %>% rbind.fill(tm_eval)
+# tm_eval <- data.frame(accuracy = 0.712,
+#            time = 18,
+#            weight = "tfidf",
+#            seed = 1621447882,
+#            model = "SuperLearner ensemble") %>% rbind.fill(tm_eval)
 
 # 8 Semi-supervised
 # Load Semi-supervised prediction and add row to evaluation table
-semi_pred <- read_csv("semi-files/semi-pred.csv", col_names = F)
-names(semi_pred) <- c("prediction",  "issue_r1",  "cv_sample")
-semitime <- read_csv("semi-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
-
-tm_eval <- data.frame(accuracy = accuracy(semi_pred$prediction, semi_pred$issue_r1),
-           precision = precision(semi_pred$prediction, semi_pred$issue_r1) %>% unlist() %>% mean(),
-           recall = recall(semi_pred$prediction, semi_pred$issue_r1) %>% unlist() %>% mean(),
-           f1_score = f1_score(semi_pred$prediction, semi_pred$issue_r1) %>% unlist() %>% mean(),
-           time = semitime,
-           weight = "tfidf",
-           seed = 1621447882,
-           model = "Semi-supervised") %>%
-  rbind.fill(tm_eval)
+# semi_pred <- read_csv("semi-files/semi-pred.csv", col_names = F)
+# names(semi_pred) <- c("prediction",  "issue",  "cv_sample")
+# semitime <- read_csv("semi-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
+# 
+# tm_eval <- data.frame(accuracy = accuracy(semi_pred$prediction, semi_pred$issue),
+#            precision = precision(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
+#            recall = recall(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
+#            f1_score = f1_score(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
+#            time = semitime,
+#            weight = "tfidf",
+#            seed = 1621447882,
+#            model = "Semi-supervised") %>%
+#   rbind.fill(tm_eval)
 
 
 # 9 Transformers
 # Load transfer models prediction and add row to evaluation table
-transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
-names(transfer_pred) <- c("prediction",  "issue_r1", "label",  "cv_sample")
-transfertime <- read_csv("transfer-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
-
-tm_eval <- data.frame(accuracy = accuracy(transfer_pred$prediction, transfer_pred$label),
-           precision = precision(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-           recall = recall(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-           f1_score = f1_score(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-           time = transfertime,
-           seed = 1621447882,
-           model = "GBERT (Transformers)") %>%
-  rbind.fill(tm_eval)
+# transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
+# names(transfer_pred) <- c("prediction",  "issue", "label",  "cv_sample")
+# transfertime <- read_csv("transfer-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
+# 
+# tm_eval <- data.frame(accuracy = accuracy(transfer_pred$prediction, transfer_pred$label),
+#            precision = precision(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
+#            recall = recall(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
+#            f1_score = f1_score(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
+#            time = transfertime,
+#            seed = 1621447882,
+#            model = "GBERT (Transformers)") %>%
+#   rbind.fill(tm_eval)
 
 # Add var for instance type
 tm_eval <- mutate(tm_eval, instance = ifelse(str_detect(model, "(GBER)|(Super)|(Semi)"), "remote", "local"))
@@ -252,7 +255,7 @@ tm_eval <- mutate(tm_eval, instance = ifelse(str_detect(model, "(GBER)|(Super)|(
 
 
 ```{r dfm-eval}
-aggregate(accuracy ~ weight, tm_eval, mean)
+aggregate(accuracy ~ weight, tm_eval, mean) # tfidf gives overall best performance
 ```
 
 The tfidf-transformed dfm yields a higher performance for most classifiers and parameter settings.
@@ -304,14 +307,14 @@ ridge_pred <- data.frame()
 for (i in 1:5) {
   print(i)
   ridge_pred <- data.frame(
-    prediction = textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i), dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i)$issue_r1, type = 7) %>% predict(., newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)),
-    issue_r1 = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)$issue_r1) %>% rbind.fill(ridge_pred)
+    prediction = textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i), dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i)$issue, type = 7) %>% predict(., newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)),
+    issue = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)$issue) %>% rbind.fill(ridge_pred)
 }
 
 # Confusion matrix and overall statistics
-ridge_pred$issue_r1 %>% table
+ridge_pred$issue %>% table
 
-truth <- ridge_pred$issue_r1
+truth <- ridge_pred$issue
 truth[truth == 191] <- 19.1
 truth[truth == 192] <- 19.2
 truth <- factor(truth, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
@@ -360,14 +363,14 @@ accuracy(truth, prediction)
 ```{r  confusion-gbert}
 # Import results
 transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
-names(transfer_pred) <- c("prediction_label",  "issue_r1", "label",  "cv_sample")
-labels <- select(transfer_pred, c(label, issue_r1)) %>% unique %>% dplyr::rename(prediction = issue_r1)
+names(transfer_pred) <- c("prediction_label",  "issue", "label",  "cv_sample")
+labels <- select(transfer_pred, c(label, issue)) %>% unique %>% dplyr::rename(prediction = issue)
 transfer_pred <- merge(transfer_pred, labels, by.x = "prediction_label", by.y = "label") %>% select(-c(prediction_label))
 
 # Confusion matrix and overall statistics
-transfer_pred$issue_r1 %>% table
+transfer_pred$issue %>% table
 
-truth <- transfer_pred$issue_r1
+truth <- transfer_pred$issue
 truth[truth == 191] <- 19.1
 truth[truth == 192] <- 19.2
 truth <- factor(truth, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
@@ -465,7 +468,7 @@ transfer_agg <- transfer_agg[order(transfer_agg$Issue), ]
 transfer_agg$Issue <- str_c(as.character(transfer_agg$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2]) %>% factor()
 
 # Readme (update!)
-readme_agg <- readme_agg %>% dplyr::rename(Issue = issue_r1, prediction = predicted) %>% select(-c(cv_sample, difference)) %>% dplyr::group_by(Issue) %>% dplyr::mutate(prediction = mean(prediction), truth = mean(truth), model = "Readme") %>% unique()
+readme_agg <- readme_agg %>% dplyr::rename(Issue = issue, prediction = predicted) %>% select(-c(cv_sample, difference)) %>% dplyr::group_by(Issue) %>% dplyr::mutate(prediction = mean(prediction), truth = mean(truth), model = "Readme") %>% unique()
 
 three_agg <- rbind.fill(readme_agg, transfer_agg, ridge_agg)
 
@@ -520,18 +523,18 @@ latex_out <- capture.output(three_agg %>%
 
 ```{r keyness_tables, out.width = "80%"}
 # Ridge (L2) with full labeled data
-tm_ridge <- textmodel_svm(dfmat_alt, dfmat_alt$issue_r1, type = 7)
+tm_ridge <- textmodel_svm(dfmat_alt, dfmat_alt$issue, type = 7)
 
 # Key words/features for classified topics
 key_feats <- data.frame()
 for (i in rownames(tm_ridge$weights)) key_feats <- 
-  data.frame(issue_r1 = i) %>% 
+  data.frame(issue = i) %>% 
   cbind(sort(tm_ridge$weights[which(rownames(tm_ridge$weights) == i),], decreasing = T)[1:5] %>% 
           attr("names") %>% str_replace_all("\\_", " ") %>% t) %>% rbind.fill(key_feats)
 
-key_feats <- key_feats[order(key_feats$issue_r1 %>% str_replace_all(c("191" = "19.1", "192" = "19.2")) %>% as.numeric), ]
+key_feats <- key_feats[order(key_feats$issue %>% str_replace_all(c("191" = "19.1", "192" = "19.2")) %>% as.numeric), ]
 
-key_feats$issue_r1 <- levels(readme_agg$issue_r1)
+key_feats$issue <- levels(readme_agg$issue)
 key_feats %>% kbl(booktabs = T, row.names = F)
 
 latex_out <- capture.output(stargazer(key_feats, summary = F,
@@ -558,8 +561,8 @@ trainsize_ridge <- data.frame(Model = "Ridge (L2)",
 
 trainsize_ridge$accuracy <- sapply(trainsize_ridge$train_size, FUN = function (x) {
   sub_train <- sample(1:ndoc(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)), x)
-  ridge_opt_mod <- textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)[sub_train, ], dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)$issue_r1[sub_train], type = 7)
-  accuracy(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 5)$issue_r1, predict(ridge_opt_mod, newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 5)))}) %>% unlist
+  ridge_opt_mod <- textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)[sub_train, ], dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)$issue[sub_train], type = 7)
+  accuracy(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 5)$issue, predict(ridge_opt_mod, newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 5)))}) %>% unlist
 
 # Load the results from GBERT transformer models
 trainsize_transfer <- read_csv("transfer-files/results-training-size.csv", col_names = F)

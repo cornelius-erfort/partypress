@@ -27,7 +27,7 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "xlsx", "tools")
+  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "quanteda.classifiers", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "xlsx", "tools")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -42,6 +42,8 @@ source("scripts/functions.R")
 seed <- 1621447882
 set.seed(seed)
 
+if(!dir.exists("other-countries")) dir.create("other-countries")
+
 ```
 
 
@@ -49,10 +51,13 @@ set.seed(seed)
 
 ```{r data, out.width = "80%"}
 # Read the labeled data into one dataframe
+labeled <- data.frame()
+
+labeled <- read.dta13("data/labeled/netherlands-labeled.dta") %>% rbind.fill
+nrow(labeled)
 
 if(file.exists("other-countries/labeled.RData")) load("other-countries/labeled.RData") else {
-  labeled <- data.frame()
-  for (country in list.files("data/labeled", full.names = T)) {
+  for (country in list.files("data/labeled", full.names = T) %>% str_subset("(xlsx)|(csv)")) {
     
     if(file_ext(country) == "xlsx") {
       print("xlsx")
@@ -78,18 +83,27 @@ if(file.exists("other-countries/labeled.RData")) load("other-countries/labeled.R
   
   names(labeled)
   
+  labeled <- filter(labeled, !is.na(date))
+
+  
   # Tidy date
   labeled$date[substr(labeled$date, 5, 5) == "-"] <- labeled$date[substr(labeled$date,   5, 5) == "-"] %>% ymd()
   labeled$date[substr(labeled$date, 3, 3) %in% c("-", "/")] <-   labeled$date[substr(labeled$date, 3, 3) %in% c("-", "/")] %>% dmy()
   labeled$date <- labeled$date %>% as.numeric() %>% as.Date(origin = "1970-01-01")
-  labeled <- filter(labeled, !is.na(date))
   nrow(labeled)
+  
+  labeled <- filter(labeled, !is.na(date))
+
   
   # Tidy issue
   # labeled$issue[is.na(labeled$issue)] <- labeled$Issue[is.na(labeled$issue)]
   # labeled$issue[is.na(labeled$issue)] <-   labeled$X1st.coding..issue[is.na(labeled$issue)]
   labeled$issue <- str_replace_all(labeled$issue, c("19a" = "191", "19b" =  "192"))
   
+  labeled$issue %>% unique %>% sort
+  labeled$issue %>% unique %>% sort %>% length
+  filter(labeled, country == "germany")$issue %>% unique %>% sort %>% length
+
   table(labeled$issue, useNA = "always")
   labeled <- filter(labeled, !is.na(issue) & issue != ".") # netherlands and ireland   are not yet labeled
   
@@ -104,29 +118,19 @@ textpress <- labeled %>% select("country", "header", "text", "issue", "party", "
 rm(labeled)
 
 # Remove non-thematic press releases
-textpress <- textpress %>% filter(issue != 98)
+# textpress <- textpress %>% filter(issue != 98)
 nrow(textpress)
 textpress <- filter(textpress, !(header %>% tolower() %>% str_detect("einladung zum presse")))
 nrow(textpress)
 
 ```
 
-## Merging categories
+## Prepare data
 
-In order to improve the classification, similar topics are merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
 
 ```{r categories}
-textpress$issue_r1 <- as.numeric(textpress$issue)
+textpress$issue <- as.numeric(textpress$issue)
 
-# Merge categories
-textpress <- textpress %>% mutate(issue_r1 = recode(issue_r1,
-                           `8`  = 7,  # Environment & Energy
-                           `13` = 10, # Transportation & Welfare
-                           `14` = 10, # Housing & Welfare
-                           `18` = 15, # Foreign Trade and Domestic Commerce
-                           `98` = 99, # Non-thematic
-                           `23` = 99) # Culture: Too few observations
-                                                  )
 textpress$htext <- str_c(textpress$header, " ", textpress$text)
 
 # Make order of documents random
@@ -148,7 +152,7 @@ if(!file.exists("other-countries/textpress.RData")) save(textpress, file = "othe
 ```{r tm-ridge}
 
 corp_press <- corpus(str_c(textpress$header, " ", textpress$text),
-                       docvars = select(textpress, c(country, issue_r1, party, cv_sample)))
+                       docvars = select(textpress, c(country, issue, party, cv_sample)))
 
 ridge_eval <- data.frame()
 
@@ -160,15 +164,15 @@ for (country in unique(corp_press$country)) {
   # Create alternative dfm (bigrams and tfidf)
   dfmat_alt <- corpus_subset(corp_country) %>%
     tokens() %>% tokens_ngrams(n = 1:2) %>%
-    dfm(remove = stopwords(ifelse(country != "spain", "de", "es")), # Stem and remove stopwords, punctuation etc.
-        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url =   T) %>%
+    dfm(remove = stopwords(str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl"))), # Stem and remove stopwords, punctuation etc.
+        remove_punct = T, remove_number = T, remove_symbols = T, remove_url =   T) %>% dfm_wordstem(language = str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl"))) %>%
     dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
              docfreq_ = "prop") %>%
      dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
              docfreq_ = "count") %>%
     suppressWarnings()
   
-  ridge_eval <- textmodel_evaluate(dfmat_alt, dfmat_alt$issue_r1, k = 5, model = "textmodel_svm", fun = "accuracy", seed = seed, parameters = list(type = 7)) %>% dplyr::mutate(country = country) %>% rbind.fill(ridge_eval)
+  ridge_eval <- textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = 5, model = "textmodel_svm", fun = "accuracy", seed = seed, parameters = list(type = 7)) %>% dplyr::mutate(country = country) %>% rbind.fill(ridge_eval)
   
 }
 
@@ -192,8 +196,8 @@ sapply(textpress$htext, str_length) %>% density() %>% plot
 sapply(textpress$htext, function(x) lengths(gregexpr("\\W+", x)) + 1) %>% max # max_seq_length = 512
 
 # Add labels 0-16 (instead of CAP labels)
-labels <- data.frame(issue_r1 = unique(textpress$issue_r1) %>% sort, label = c(0:16))
-textpress <- merge(textpress, labels, by = "issue_r1")
+labels <- data.frame(issue = unique(textpress$issue) %>% sort, label = c(0:22))
+textpress <- merge(textpress, labels, by = "issue")
 
 # Write to csv
 select(textpress, c(htext, label, cv_sample, country, id)) %>% write.csv("other-countries/alldocs.csv", row.names = F)

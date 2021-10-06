@@ -60,11 +60,12 @@ The corpus is generated in the script "Preparing the textual data". We create a 
 ```{r data, out.width = "80%"}
 load("readme-files/alldocs.RData")
 issue_categories <- 
-  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
-             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
-                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
-                                "Technology", "Government Operations", "Other", "International Affairs", "EU"))
+  data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 191:192), 
+             issue_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", 
+                                "Immigration", "Transportation", "Law and Crime", "Social Welfare",
+                             "Housing", "Domestic Commerce", "Defense", "Technology", 
+                             "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
 ```
 
 # Readme2: Calculating proportions
@@ -105,15 +106,19 @@ if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordve
   }
 
   readme_cv <- list()
+  readme_time <- list()
+  
 for (i in unique(alldocs$cv_sample) %>% sort) {
   # Estimate category proportions
   set.seed(2138) # Set a seed if you choose
+  start_readme <- Sys.time()
   readme_cv[[i]] <- readme(
     dfm = wordVec_summaries_labeled, 
     labeledIndicator = ifelse(alldocs$cv_sample == i, 0, 1),
-    categoryVec = alldocs$issue_r1,
-    nCores = 2,
-    nCores_OnJob = 2) %>% suppressWarnings()
+    categoryVec = alldocs$issue,
+    nCores = 16,
+    nCores_OnJob = 8) %>% suppressWarnings()
+  readme_time[[i]] <- Sys.time() - start_readme
 }
   save(readme_cv, file = "readme-files/readme_cv.RData")
 }
@@ -133,9 +138,9 @@ for (i in 1:length(readme_cv)) {
   readme.estimates$point_readme
   
   agg_eval <- data.frame(
-    issue_r1 = attr(readme.estimates$point_readme, "names"), 
+    issue = attr(readme.estimates$point_readme, "names"), 
     predicted = readme.estimates$point_readme %>% as.vector(),
-    truth = (table(alldocs$issue_r1[alldocs$cv_sample == i])/sum(table(alldocs$issue_r1[alldocs$cv_sample == i]))) %>% as.vector(),
+    truth = (table(alldocs$issue[alldocs$cv_sample == i])/sum(table(alldocs$issue[alldocs$cv_sample == i]))) %>% as.vector(),
     cv_sample = i
 ) %>% rbind.fill(agg_eval)
   
@@ -147,19 +152,19 @@ agg_eval$difference <- agg_eval$predicted - agg_eval$truth
 agg_eval <- dplyr::mutate(agg_eval, predicted = round(predicted, 3), truth = round(truth, 3), difference = round(difference, 3))
 
 # Change and order labels
-agg_eval$issue_r1[agg_eval$issue_r1 == 191] <- 19.1
-agg_eval$issue_r1[agg_eval$issue_r1 == 192] <- 19.2
-agg_eval$issue_r1 <- as.factor(as.numeric(agg_eval$issue_r1))
-levels(agg_eval$issue_r1) <- str_c(levels(agg_eval$issue_r1), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+agg_eval$issue[agg_eval$issue == 191] <- 19.1
+agg_eval$issue[agg_eval$issue == 192] <- 19.2
+agg_eval$issue <- as.factor(as.numeric(agg_eval$issue))
+levels(agg_eval$issue) <- str_c(levels(agg_eval$issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
 
 save(agg_eval, file = "readme-files/agg_eval.RData")
 
 # Write latex table
 if(!dir.exists("tables")) dir.create("tables")
-# latex_out <- capture.output(stargazer(agg_eval %>% dplyr::group_by(issue_r1) %>% 
+# latex_out <- capture.output(stargazer(agg_eval %>% dplyr::group_by(issue) %>% 
 #   dplyr::summarise(predicted = mean (predicted),
 #             truth = mean(truth)) %>%
-#   dplyr::rename(issue = issue_r1) %>% as.data.frame() %>%
+#   dplyr::rename(issue = issue) %>% as.data.frame() %>%
 #   stargazer(summary = F, rownames = F, 
 #             title = "Evaluation of aggregate values (readme2)", 
 #             label = "tab:agg_eval_readme", 
@@ -169,7 +174,7 @@ if(!dir.exists("tables")) dir.create("tables")
 # Plot aggregate evaluation
 if(!dir.exists("plots")) dir.create("plots")
 
-plot_agg_eval(agg_eval %>% dplyr::group_by(issue_r1) %>% 
+plot_agg_eval(agg_eval %>% dplyr::group_by(issue) %>% 
   dplyr::summarise(predicted = mean (predicted),
             truth = mean(truth)), "readme")
 
@@ -193,7 +198,7 @@ nrow(all_germany)
 all_germany$party <- all_germany$party %>% str_replace_all(c("union_fraktion" = "CDU/CSU", "spd_fraktion" = "SPD", "90gruene_fraktion" = "B'90/Die Grünen", "fdp_bundesverband" = "FDP", "fdp_fraktion" = "FDP", "linke_fraktion" = "DIE LINKE", "afd_bundesverband" = "AfD", "afd_fraktion" = "AfD"))
 
 # Merge categories
-all_germany$issue_r1 <- all_germany$issue %>% as.character %>% str_replace_all(c("a" = "1", "b" = "2")) %>% str_extract("[:digit:]*") %>% as.numeric
+all_germany$issue <- all_germany$issue %>% as.character %>% str_replace_all(c("a" = "1", "b" = "2")) %>% str_extract("[:digit:]*") %>% as.numeric
 
 # Make quarterly date
 all_germany$date <- as.character(all_germany$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
@@ -241,9 +246,9 @@ for (party in unique(all_germany$party)) {
       
     # Subset corpus to party/time and run readme
     readme_storage <- readme(
-      dfm = wordVec_summaries_all[(all_germany$party == party &   all_germany$date == date) | !is.na(all_germany$issue_r1), ],
-      labeledIndicator =   ifelse(is.na(all_germany$issue_r1)[(all_germany$party == party &   all_germany$date == date) | !is.na(all_germany$issue_r1)], 0, 1),
-      categoryVec = all_germany$issue_r1[(all_germany$party ==   party & all_germany$date == date) | !is.na(all_germany$issue_r1)],
+      dfm = wordVec_summaries_all[(all_germany$party == party &   all_germany$date == date) | !is.na(all_germany$issue), ],
+      labeledIndicator =   ifelse(is.na(all_germany$issue)[(all_germany$party == party &   all_germany$date == date) | !is.na(all_germany$issue)], 0, 1),
+      categoryVec = all_germany$issue[(all_germany$party ==   party & all_germany$date == date) | !is.na(all_germany$issue)],
       nCores = 2,
       nCores_OnJob = 2) %>% suppressWarnings()
     
@@ -252,7 +257,7 @@ for (party in unique(all_germany$party)) {
     }
     
     issue_agendas_readme <- data.frame(
-      issue_r1 = attr(readme_storage$point_readme, "names"),
+      issue = attr(readme_storage$point_readme, "names"),
       attention = readme_storage$point_readme %>% as.vector(),
       date = date  %>% as.Date(origin = "1970-01-01"),
       party = party) %>% rbind.fill(issue_agendas_readme)
@@ -260,7 +265,7 @@ for (party in unique(all_germany$party)) {
   }
 }
 
-issue_agendas_readme <- merge(issue_agendas_readme, issue_categories, by = "issue_r1")
+issue_agendas_readme <- merge(issue_agendas_readme, issue_categories, by = "issue")
 save(issue_agendas_readme, file = "readme-files/issue_agendas_readme.RData")
 
 ```

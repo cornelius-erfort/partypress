@@ -19,9 +19,9 @@ knitr::opts_knit$set(root.dir = dirname(getwd()))
 In this script, we test the performance of a series of classifiers across a diverse set of parameter configurations and for two different dfm representations. 
 For most classifiers, the tfidf-transformed dfm with bigrams (min_docfreq = 5 count, max_docfreq = .06 prop) yields a better performance.
 
-The best accuracy of 68.20% is obtained using the Superlearner ensemble of classifiers (although this is not cross-validated). Ridge (L2) is the best single classifier with 67.69%.
+The best accuracy of ?% is obtained using the Superlearner ensemble of classifiers (although this is not cross-validated). Ridge (L2) is the best single classifier with 66.9%.
 
-The fastest classifier is Naive bayes, estimated locally in 0.34 minutes (accuracy 65.98 %).
+The fastest classifier is Naive bayes, estimated locally in 0.24 seconds (accuracy 65.98 %).
 
 
 # Setting up
@@ -36,9 +36,9 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "remotes", "devtools", "pkgload")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "remotes", "devtools")
 
-lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+# lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages) # Windows doesn't like this...
 
 if(!("quanteda.classifiers" %in% rownames(installed.packages()))) {
   remotes::install_github("quanteda/quanteda.classifiers")
@@ -112,12 +112,12 @@ We calculate a Multinomial Naive Bayes (NB) text classification model. Multinomi
 if(!dir.exists("supervised-files/textmodels")) dir.create("supervised-files/textmodels")
 filename <- "supervised-files/textmodels/naivebayes_eval.RData"
 if(file.exists(filename)) load(filename) else {
-  naivebayes_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, seed = seed,
+  naivebayes_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed,
             model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"),
             parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3))) %>% dplyr::rename(weight = prior)
   
   # Add alternative dfm (with bigrams and max_docfreq 20%)
-  naivebayes_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue_r1, k = folds_cv, seed = seed,
+  naivebayes_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed,
             model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"),
             parameters = list(distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3))) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(naivebayes_eval)
   
@@ -139,7 +139,7 @@ if(file.exists(filename)) load(filename) else {
   ridge_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = c(0, 7))) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(ridge_eval)
   
     ridge_eval$model <- "Ridge (L2)"
-    # save(ridge_eval, file = filename)
+    save(ridge_eval, file = filename)
 }
 ```
 
@@ -151,10 +151,10 @@ We estimate the L1-regularized logistic regression for our classification task.
 # Five-fold cross-validation for every possible parameter combination
 filename <- "supervised-files/textmodels/lasso_eval.RData"
 if(file.exists(filename)) load(filename) else {
-  lasso_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6))
+  lasso_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6))
   
     # Add alternative dfm (with bigrams and max_docfreq 20%)
-  lasso_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue_r1, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 6)) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(lasso_eval)
+  lasso_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 6)) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(lasso_eval)
   
   lasso_eval$model <- "Lasso (L1)"
   save(lasso_eval, file = filename)
@@ -173,7 +173,7 @@ registerDoMC(cores = 4)
 filename <- "supervised-files/textmodels/elasticnet_mod.RData"
 if(file.exists(filename)) load(filename) else {
   eval_start <- Sys.time()
-  elasticnet_mod <- glmnet(x = dfm_subset(dfmat, dfmat$cv_sample != 1), y = dfm_subset(dfmat, dfmat$cv_sample != 1)$issue_r1,
+  elasticnet_mod <- glmnet(x = dfm_subset(dfmat, dfmat$cv_sample != 1), y = dfm_subset(dfmat, dfmat$cv_sample != 1)$issue,
                    family = "multinomial", alpha = 0.5,
                    type.measure = "class", standardize = T)
   elasticnet_mod$time <- as.numeric(Sys.time() - eval_start)
@@ -187,20 +187,20 @@ filename <- "supervised-files/textmodels/elasticnet_pred.RData"
 if(file.exists(filename)) load(filename) else {
 # Get lambda with best accuracy
 elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class")
-acc_list <- apply(elasticnet_pred, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue_r1))
+acc_list <- apply(elasticnet_pred, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
 elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class", s = elasticnet_mod$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
 
 save(elasticnet_pred, file = filename)
 }
 
 # Save accuracy to compare to alternative dfm
-(benchmark_acc <- accuracy(elasticnet_pred, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue_r1))
+(benchmark_acc <- accuracy(elasticnet_pred, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
 
 # Estimate alternative model (bigrams and tfidf)
 filename <- "supervised-files/textmodels/elasticnet_mod_alt.RData"
 if(file.exists(filename)) load(filename) else {
   eval_start <- Sys.time()
-  elasticnet_mod_alt <- glmnet(x = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1), y = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue_r1,
+  elasticnet_mod_alt <- glmnet(x = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1), y = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue,
                    family = "multinomial", alpha = 0.5,
                    type.measure = "class", standardize = T)
     elasticnet_mod_alt$time <- as.numeric(Sys.time() - eval_start)
@@ -212,7 +212,7 @@ if(file.exists(filename)) load(filename) else {
   
 # Get lambda with best accuracy
 elasticnet_pred_alt <- predict(elasticnet_mod_alt, newx = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class")
-acc_list <- apply(elasticnet_pred_alt, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue_r1))
+acc_list <- apply(elasticnet_pred_alt, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue))
 elasticnet_pred_alt <- predict(elasticnet_mod_alt, newx = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class", s = elasticnet_mod_alt$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
 
 filename <- "supervised-files/textmodels/elasticnet_pred_alt.RData"
@@ -220,7 +220,7 @@ save(elasticnet_pred_alt, file = filename)
 
 # Which model is better?
 print("Optimal weight:")
-if(accuracy(elasticnet_pred_alt,  dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue_r1) %>% as.numeric() > benchmark_acc %>% as.numeric()) {
+if(accuracy(elasticnet_pred_alt,  dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue) %>% as.numeric() > benchmark_acc %>% as.numeric()) {
   print(elasticnet_mod_alt$weight)
   elasticnet_opt_alt <- T
 } else {
@@ -242,10 +242,10 @@ We estimate support vector classification (Crammer and Singer 2001) for our clas
 # Five-fold cross-validation for every possible parameter combination
 filename <- "supervised-files/textmodels/svm_eval.RData"
 if(file.exists(filename)) load(filename) else {
-  svm_eval <- textmodel_evaluate(dfmat, dfmat$issue_r1, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4))
+  svm_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4))
   
     # Add alternative dfm (with bigrams and max_docfreq 20%)
-  svm_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue_r1, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 4)) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(svm_eval)
+  svm_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 4)) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(svm_eval)
   
   svm_eval$model <- "SVM" 
   save(svm_eval, file =  filename)
@@ -263,8 +263,8 @@ We estimate a model using the random forest algorithm for classification. We for
 filename <- "supervised-files/textmodels/randomforest_eval.RData"
 if(file.exists(filename)) load(filename) else {
   eval_start <- Sys.time()
-  randomforest_eval <-  randomForest(x = as.matrix(dfm_subset(dfmat, dfmat$cv_sample != 1)), y = as.factor(dfm_subset(dfmat, dfmat$cv_sample != 1)$issue_r1),
-                   xtest = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat, dfmat$cv_sample == 1)$issue_r1),
+  randomforest_eval <-  randomForest(x = as.matrix(dfm_subset(dfmat, dfmat$cv_sample != 1)), y = as.factor(dfm_subset(dfmat, dfmat$cv_sample != 1)$issue),
+                   xtest = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat, dfmat$cv_sample == 1)$issue),
                    importance = T, mtry = 20, ntree = 100,
                    keep.forest = T, type = "class")
   randomforest_eval$time <- as.numeric(Sys.time() - eval_start)
@@ -280,14 +280,14 @@ filename <- "supervised-files/textmodels/randomforest_pred.RData"
 save(randomforest_pred, file = filename)
 
 # Save accuracy to compare to alternative dfm
-(benchmark_acc <- accuracy(randomforest_pred, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue_r1))
+(benchmark_acc <- accuracy(randomforest_pred, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
 
 # Estimate alternative model (bigrams and tfidf)
 filename <- "supervised-files/textmodels/randomforest_eval_alt.RData"
 if(file.exists(filename)) load(filename) else {
   eval_start <- Sys.time()
-  randomforest_eval_alt <-  randomForest(x = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)), y = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue_r1),
-                   xtest = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue_r1),
+  randomforest_eval_alt <-  randomForest(x = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)), y = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue),
+                   xtest = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue),
                    importance = T, mtry = 20, ntree = 100,
                    keep.forest = T, type = "class")
   randomforest_eval_alt$time <- as.numeric(Sys.time() - eval_start)
@@ -305,7 +305,7 @@ save(randomforest_pred_alt, file = filename)
 
 # Which model is better?
 print("Optimal weight:")
-if(accuracy(randomforest_pred_alt,  dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue_r1) %>% as.numeric() > benchmark_acc %>% as.numeric()) {
+if(accuracy(randomforest_pred_alt,  dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue) %>% as.numeric() > benchmark_acc %>% as.numeric()) {
   print(randomforest_eval_alt$weight)
   randomforest_opt_alt <- T
 } else {

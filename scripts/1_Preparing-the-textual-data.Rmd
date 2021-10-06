@@ -62,46 +62,23 @@ table(textpress$issue) %>% as.data.frame() %>% dplyr::rename(issue = Var1, n = F
 
 ```
 
-## Merge categories
+## Prepare data
 
-In order to improve the classification, similar topics are merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
+Add issue category names, unify parties, add variable for cross-validation.
 
-```{r categories}
-textpress$issue_r1 <- as.numeric(textpress$issue)
+```{r prepare}
 
-# Merge categories
-textpress <- textpress %>% mutate(issue_r1 = recode(issue_r1,
-                           `8`  = 7,  # Environment & Energy
-                           `13` = 10, # Transportation & Welfare
-                           `14` = 10, # Housing & Welfare
-                           `18` = 15, # Foreign Trade and Domestic Commerce
-                           `98` = 99, # Non-thematic and Other
-                           `23` = 99) # Culture: Too few observations
-                                                  )
 # Category descriptions
 issue_categories <- 
-  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 20, 99, 191:192), 
-             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
-                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
-                                "Technology", "Government Operations", "Other", "International Affairs", "EU"))
-issue_categories %>% dplyr::rename("Issue number" = issue_r1, "Issue name" = issue_r1_descr) %>% 
+  data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 191:192), 
+             issue_descr = c("Macroeconomics", "Civil Rights", 
+                                "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", 
+                                "Immigration", "Transportation", "Law and Crime", "Social Welfare",
+                             "Housing", "Domestic Commerce", "Defense", "Technology", 
+                             "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
+issue_categories %>% dplyr::rename("Issue number" = issue, "Issue name" = issue_descr) %>% 
   kbl(booktabs = T)
 
-# Write latex table
-if(!dir.exists("tables")) dir.create("tables")
-latex_out <- issue_categories[c(1:13, 16:17, 14:15), ] %>% 
-  mutate(issue_r1 = as.character(issue_r1) %>% str_replace_all(c("191" = "19.1", "192" = "19.2"))) %>%
-  dplyr::rename(Code = issue_r1, Topic = issue_r1_descr) %>%
-  stargazer(out = "tables/issue-categories.tex", summary = F, rownames = F, 
-            title = "Issue categories used for classification", 
-            label = "tab:issue-categories") %>% 
-  capture.output()
-
-# Distribution with merged categories
-table(textpress$issue_r1) %>% as.data.frame() %>% 
-  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
-  kable_styling(latex_options="scale_down")
 
 # Party names
 party_names <- data.frame(party = c("90gruene_fraktion", 
@@ -130,6 +107,9 @@ textpress$htext <- str_c(textpress$header, " ", textpress$text)
 textpress <- textpress[sample(1:nrow(textpress), nrow(textpress)), ]
 textpress$cv_sample <- sample(1:5, nrow(textpress), replace = T)
 
+if(!dir.exists("supervised-files")) dir.create("supervised-files")
+if(!dir.exists("supervised-files/data")) dir.create("supervised-files/data")
+
 # Save dataframe (do not overwrite because the cross-validation folds are saved here)
 if(!file.exists("supervised-files/data/textpress.RData")) save(textpress, file = "supervised-files/data/textpress.RData") else{
   load("supervised-files/data/textpress.RData")
@@ -148,10 +128,13 @@ Subsequently, we follow standard procedures for the preparation of the document 
 ```{r dfm}
 if(!dir.exists("supervised-files")) dir.create("supervised-files")
 
-if(file.exists("supervised-files/data/dfmat.RData")) load("supervised-files/data/dfmat.RData") else {
+if(file.exists("supervised-files/data/dfmat.RData")) {
+   load("supervised-files/data/dfmat.RData")
+   load("supervised-files/data/dfmat_alt.RData")
+} else {
     
 corp_press <- corpus(str_c(textpress$header, " ", textpress$text),
-                       docvars = select(textpress, c(id, issue, issue_r1, party_name, cv_sample)))
+                       docvars = select(textpress, c(id, issue, party_name, cv_sample)))
 
 # Create dfm
 dfmat <- corpus_subset(corp_press) %>%
@@ -185,16 +168,16 @@ save(dfmat_alt, file = "supervised-files/data/dfmat_alt.RData")
 if(!dir.exists("superlearner-files")) dir.create("superlearner-files")
 
 ## Create training and test set (also as csv for Python)
-cbind(cv_sample = dfmat$cv_sample, label = dfmat$issue_r1, as.data.frame(dfmat)) %>% select(-c(doc_id)) %>% write.csv("supervised-files/data/dfmat.csv", row.names = F)
+cbind(cv_sample = dfmat$cv_sample, label = dfmat$issue, as.data.frame(dfmat)) %>% select(-c(doc_id)) %>% write.csv("superlearner-files/dfmat.csv", row.names = F)
 
 ## Create training and test set (also as csv for Python)
-cbind(cv_sample = dfmat_alt$cv_sample, label = dfmat_alt$issue_r1, as.data.frame(dfmat_alt)) %>% select(-c(doc_id)) %>% write.csv("supervised-files/data/dfmat_alt.csv", row.names = F)
+cbind(cv_sample = dfmat_alt$cv_sample, label = dfmat_alt$issue, as.data.frame(dfmat_alt)) %>% select(-c(doc_id)) %>% write.csv("superlearner-files/dfmat_alt.csv", row.names = F)
 
 ```
 
 # Readme, semi-supervised, and transfer models
 
-Genereate csv file with unlabeled and labeled documents.
+Generate csv file with unlabeled and labeled documents.
 
 ```{r semi-transfer}
 if(!dir.exists("semi-files")) dir.create("semi-files")
@@ -210,7 +193,7 @@ names(alldocs)
 
 # Add labels and folds by id from textpress
 load("supervised-files/data/textpress.RData")
-alldocs <- merge(alldocs, select(textpress, c(id, issue, issue_r1, cv_sample)), by = "id", all = T)
+alldocs <- merge(alldocs, select(textpress, c(id, issue, cv_sample)), by = "id", all = T)
 nrow(alldocs) # 44,950
 
 alldocs$cv_sample[is.na(alldocs$cv_sample)] <- -1
@@ -222,17 +205,17 @@ alldocs$cv_sample[is.na(alldocs$cv_sample)] <- -1
 alldocs$htext <- str_c(alldocs$header, " ", alldocs$text)
 alldocs <- select(alldocs, -c(header, text))
 
-alldocs$issue_r1[is.na(alldocs$issue_r1)] <- -1
+alldocs$issue[is.na(alldocs$issue)] <- -1
 
 # Show distribution of text length (labeled data)
-sapply(alldocs$htext[alldocs$issue_r1 != -1], str_length) %>% density() %>% plot
+sapply(alldocs$htext[alldocs$issue != -1], str_length) %>% density() %>% plot
 
 # Count words/tokens
 sapply(alldocs$htext, function(x) lengths(gregexpr("\\W+", x)) + 1) %>% summary # max_seq_length = 512
 
-# Make labels compatible with transformers (0-16 instead of CAP labels)
-labels <- data.frame(issue_r1 = unique(alldocs$issue_r1) %>% sort, label = c(-1, 0:16))
-alldocs <- merge(alldocs, labels, by = "issue_r1", all.x = T)
+# Make issues compatible with transformers (0-23 instead of CAP labels)
+labels <- data.frame(issue = unique(alldocs$issue) %>% sort, label = c(-1, 0:22))
+alldocs <- merge(alldocs, labels, by = "issue", all.x = T)
 
 
 table(alldocs$issue, useNA = "ifany")
@@ -244,7 +227,9 @@ if(!file.exists("transfer-files/alldocs.csv")) write_csv(alldocs, file = "transf
 
 if(!file.exists("semi-files/alldocs.csv")) write_csv(select(alldocs, -c(label)), file = "semi-files/alldocs.csv")
 
-if(!file.exists("readme-files/alldocs.RData")) select(alldocs, -c(label)) %>% save(., file = "readme-files/alldocs.RData")
+alldocs <- select(alldocs, -c(label))
+
+if(!file.exists("readme-files/alldocs.RData")) save(alldocs, file = "readme-files/alldocs.RData")
 
 
 ```
