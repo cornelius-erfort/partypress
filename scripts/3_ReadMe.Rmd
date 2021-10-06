@@ -45,6 +45,9 @@ theme_update(text = element_text(family = "LM Roman 10")) # Set font family for 
 
 source("scripts/functions.R")
 
+set.seed(1621447882) # Set a seed if you choose
+
+
 if(!dir.exists("readme-files")) dir.create("readme-files")
 
 ```
@@ -53,12 +56,11 @@ if(!dir.exists("readme-files")) dir.create("readme-files")
 
 The sample data for Germany consists of 2,612 labeled press releases. The dataset is not uploaded on GitHub.
 
-In order to improve the classification, similar topics were merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
-
 The corpus is generated in the script "Preparing the textual data". We create a text corpus based on the header and text of each press release.
 
 ```{r data, out.width = "80%"}
 load("readme-files/alldocs.RData")
+table(alldocs$issue == -1)
 issue_categories <- 
   data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 191:192), 
              issue_descr = c("Macroeconomics", "Civil Rights", 
@@ -99,9 +101,14 @@ if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordve
       }
     
   ## Generate a word vector summary for all documents
+    
+    cleaned_text <- cleanme(alldocs$htext)
+    glove_ger_mat <- glove_ger %>% as.matrix
+    
     wordVec_summaries_labeled <- undergrad(
-    documentText = cleanme(alldocs$htext),
-    wordVecs = glove_ger %>% as.matrix)
+    documentText = cleaned_text,
+    wordVecs = glove_ger_mat)
+    
     save(wordVec_summaries_labeled, file = "readme-files/wordvectors/wordVec_summaries_labeled.RData")
   }
 
@@ -110,7 +117,6 @@ if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordve
   
 for (i in unique(alldocs$cv_sample) %>% sort) {
   # Estimate category proportions
-  set.seed(2138) # Set a seed if you choose
   start_readme <- Sys.time()
   readme_cv[[i]] <- readme(
     dfm = wordVec_summaries_labeled, 
