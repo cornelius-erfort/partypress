@@ -10,7 +10,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F, dev = "cairo_pdf")
 knitr::opts_knit$set(root.dir = dirname(getwd()))
 ```
 
@@ -195,58 +195,53 @@ tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$i
 
 # 7 SuperLearner
 # Load superlearner prediction and add row to evaluation table
-# super_pred <- read_csv("superlearner-files/super-pred.csv", col_names = F)[[1]] %>% as.numeric()
-# names(super_pred) <- c("prediction", "issue", "cv_sample")
-# supertime <- read_csv("superlearner-files/cv-time.txt", col_names = F, col_types = "n")[1,1] %>% as.numeric()
-# superlearner_test <- dfm_subset(dfmat_alt, dfmat$cv_sample == 1)$issue
-# 
-# tm_eval <- data.frame(accuracy = accuracy(super_pred$prediction, super_pred$issue),
-#            precision = precision(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
-#            recall = recall(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
-#            f1_score = f1_score(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
-#            time = supertime,
-#            weight = "tfidf",
-#            seed = 1621447882,
-#            model = "SuperLearner ensemble") %>%
-#   rbind.fill(tm_eval)
+super_pred <- read_csv("superlearner-files/super-pred.csv", col_names = F)
+names(super_pred) <- c("prediction", "issue", "cv_sample")
+supertime <- read_csv("superlearner-files/cv-time.txt", col_names = F, col_types = "n")[1,1] %>% as.numeric()
+superlearner_test <- dfm_subset(dfmat_alt, dfmat$cv_sample == 1)$issue
 
-# tm_eval <- data.frame(accuracy = 0.712,
-#            time = 18,
-#            weight = "tfidf",
-#            seed = 1621447882,
-#            model = "SuperLearner ensemble") %>% rbind.fill(tm_eval)
+tm_eval <- data.frame(accuracy = accuracy(super_pred$prediction, super_pred$issue),
+           precision = precision(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
+           recall = recall(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
+           f1_score = f1_score(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
+           time = supertime,
+           weight = "tfidf",
+           seed = 1621447882,
+           model = "SuperLearner ensemble") %>%
+  rbind.fill(tm_eval)
+
 
 # 8 Semi-supervised
 # Load Semi-supervised prediction and add row to evaluation table
-# semi_pred <- read_csv("semi-files/semi-pred.csv", col_names = F)
-# names(semi_pred) <- c("prediction",  "issue",  "cv_sample")
-# semitime <- read_csv("semi-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
-# 
-# tm_eval <- data.frame(accuracy = accuracy(semi_pred$prediction, semi_pred$issue),
-#            precision = precision(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
-#            recall = recall(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
-#            f1_score = f1_score(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
-#            time = semitime,
-#            weight = "tfidf",
-#            seed = 1621447882,
-#            model = "Semi-supervised") %>%
-#   rbind.fill(tm_eval)
+semi_pred <- read_csv("semi-files/semi-pred.csv", col_names = F)
+names(semi_pred) <- c("prediction",  "issue",  "cv_sample")
+semitime <- read_csv("semi-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
+
+tm_eval <- data.frame(accuracy = accuracy(semi_pred$prediction, semi_pred$issue),
+           precision = precision(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
+           recall = recall(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
+           f1_score = f1_score(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
+           time = semitime,
+           weight = "tfidf",
+           seed = 1621447882,
+           model = "Semi-supervised") %>%
+  rbind.fill(tm_eval)
 
 
 # 9 Transformers
 # Load transfer models prediction and add row to evaluation table
-# transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
-# names(transfer_pred) <- c("prediction",  "issue", "label",  "cv_sample")
-# transfertime <- read_csv("transfer-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
-# 
-# tm_eval <- data.frame(accuracy = accuracy(transfer_pred$prediction, transfer_pred$label),
-#            precision = precision(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-#            recall = recall(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-#            f1_score = f1_score(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-#            time = transfertime,
-#            seed = 1621447882,
-#            model = "GBERT (Transformers)") %>%
-#   rbind.fill(tm_eval)
+transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
+names(transfer_pred) <- c("prediction",  "issue", "label",  "cv_sample")
+transfertime <- read_csv("transfer-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
+
+tm_eval <- data.frame(accuracy = accuracy(transfer_pred$prediction, transfer_pred$label),
+           precision = precision(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
+           recall = recall(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
+           f1_score = f1_score(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
+           time = transfertime,
+           seed = 1621447882,
+           model = "GBERT (Transformers)") %>%
+  rbind.fill(tm_eval)
 
 # Add var for instance type
 tm_eval <- mutate(tm_eval, instance = ifelse(str_detect(model, "(GBER)|(Super)|(Semi)"), "remote", "local"))
@@ -317,12 +312,12 @@ ridge_pred$issue %>% table
 truth <- ridge_pred$issue
 truth[truth == 191] <- 19.1
 truth[truth == 192] <- 19.2
-truth <- factor(truth, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+truth <- factor(truth, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
 
 prediction <- ridge_pred$prediction
 prediction[prediction == 191] <- 19.1
 prediction[prediction == 192] <- 19.2
-prediction <- factor(prediction, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+prediction <- factor(prediction, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
 
 ridge_pred <- data.frame(truth, prediction, model = "Ridge (L2)")
 
@@ -349,8 +344,10 @@ issue_eval_ridge <- data.frame(truth = truth, prediction = prediction) %>%
 issue_eval_ridge[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval_ridge[, c("Accuracy", "Precision", "Recall", "F1 score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 3))
 
 # Change and order labels
+issue_eval_ridge$Issue <- factor(issue_eval_ridge$Issue, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+
 issue_eval_ridge <- issue_eval_ridge[order(issue_eval_ridge$Issue), ]
-issue_eval_ridge$Issue <- str_c(as.character(issue_eval_ridge$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+issue_eval_ridge$Issue <- str_c(as.character(issue_eval_ridge$Issue), " - ", issue_categories[c(1, 10, 11:17, 22:23, 2, 18:19, 3:9, 20:21), 2])
 
 # Accuracy
 accuracy(truth, prediction)
@@ -373,12 +370,12 @@ transfer_pred$issue %>% table
 truth <- transfer_pred$issue
 truth[truth == 191] <- 19.1
 truth[truth == 192] <- 19.2
-truth <- factor(truth, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+truth <- factor(truth, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
 
 prediction <- transfer_pred$prediction
 prediction[prediction == 191] <- 19.1
 prediction[prediction == 192] <- 19.2
-prediction <- factor(prediction, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+prediction <- factor(prediction, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
 
 transfer_pred <- data.frame(truth, prediction, model = "Transformers")
 
@@ -407,7 +404,7 @@ issue_eval_transfer[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue
 
 # Order and add names
 issue_eval_transfer <- issue_eval_transfer[order(issue_eval_transfer$Issue), ]
-issue_eval_transfer$Issue <- str_c(as.character(issue_eval_transfer$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+issue_eval_transfer$Issue <- str_c(as.character(issue_eval_transfer$Issue), " - ", issue_categories[c(1, 10, 11:17, 22:23, 2, 18:19, 3:9, 20:21), 2])
 
 # Write latex table
 if(!dir.exists("tables")) dir.create("tables")
@@ -460,14 +457,14 @@ readme_agg <- agg_eval
 # Ridge
 ridge_agg <- merge(table(ridge_pred$truth) / nrow(ridge_pred), table(ridge_pred$prediction) / nrow(ridge_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, truth = Freq.x, prediction = Freq.y) %>% dplyr::mutate(model = "Ridge (L2)")
 ridge_agg <- ridge_agg[order(ridge_agg$Issue), ]
-ridge_agg$Issue <- str_c(as.character(ridge_agg$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2]) %>% factor()
+ridge_agg$Issue <- str_c(as.character(ridge_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
 
 # Transformers
 transfer_agg <- merge(table(transfer_pred$truth) / nrow(transfer_pred), table(transfer_pred$prediction) / nrow(transfer_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, truth = Freq.x, prediction = Freq.y) %>% dplyr::mutate(model = "Transformers")
 transfer_agg <- transfer_agg[order(transfer_agg$Issue), ]
-transfer_agg$Issue <- str_c(as.character(transfer_agg$Issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2]) %>% factor()
+transfer_agg$Issue <- str_c(as.character(transfer_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
 
-# Readme (update!)
+# Readme
 readme_agg <- readme_agg %>% dplyr::rename(Issue = issue, prediction = predicted) %>% select(-c(cv_sample, difference)) %>% dplyr::group_by(Issue) %>% dplyr::mutate(prediction = mean(prediction), truth = mean(truth), model = "Readme") %>% unique()
 
 three_agg <- rbind.fill(readme_agg, transfer_agg, ridge_agg)
@@ -477,7 +474,7 @@ three_agg$difference <- three_agg$prediction - three_agg$truth
 three_agg[, c("truth", "prediction", "difference")] <- apply(three_agg[, c("truth", "prediction", "difference")], MARGIN = 2, function (x) round(x, 3)) # Round
 
 # MSE
-print(sum((three_agg$difference*100)^2)/nrow(three_agg)) # 0.899
+print(sum((three_agg$difference*100)^2)/nrow(three_agg)) # 1.056
 
 # Plot
 # Plotting aggregate evaluation in one plot
@@ -494,16 +491,16 @@ ggplot(three_agg, aes(x = truth, y = prediction)) +
   ylim(c(0, .2)) + xlim(c(0, .2)) +
   guides(color = guide_legend(ncol = 3)) +
   labs(color = "Issue category") +
-       # caption = "The plot shows predicted proportions from five folds."
   theme(legend.position = "bottom",
         legend.title = element_blank(),
         aspect.ratio = 1, 
         text = element_text(size = 7),
         legend.key.size =  unit(.5,"line"),
         legend.text = element_text(size = 5)) +
-  facet_wrap(~ model)  +
-  ggsave("plots/agg_eval_compare_facet.pdf", 
-         device = cairo_pdf, width = 3*2^.5, height = 3) +
+  facet_wrap(~ model) 
+
+  ggsave("plots/agg_eval_compare_facet.pdf", device = cairo_pdf, width = 3*2^.5, height = 3)
+  
   ggsave("plots/agg_eval_compare_facet.png",  
          width = 3*2^.5, height = 3)
 
@@ -554,7 +551,7 @@ To do so, we rely on the top-performing single classifier, Ridge (L2), as well a
 The size of the training dataset affects the accuracy of our model. Our analysis suggests that an enlargement of our training dataset would only lead to marginal performance improvements. On the contrary, the Transformers model already yields an accuracy of over 70% with only about 750 coded press releases.
 
 
-```{r train-size}
+```{r train-size, eval=FALSE}
 trainsize_ridge <- c(5, 25, 50, 100, 200, 300, 400, 500, 600, 700, 1000, 1500, 1750, 2000, 2095)
 trainsize_ridge <- data.frame(Model = "Ridge (L2)",
                               train_size = trainsize_ridge)
@@ -576,8 +573,6 @@ names(trainsize_multi) <- c("accuracy", "train_size")
 trainsize_multi$Model <- "Multi-lingual"
 train_size <- rbind(train_size, trainsize_multi)
 
-
-
 ggplot(train_size, aes(x = train_size, y = accuracy)) + 
   theme(text = element_text(size = 16)) +
   # geom_smooth(aes(color = Model, lty = Model), method = "loess", formula = "y ~ x", se = F) +
@@ -586,8 +581,8 @@ ggplot(train_size, aes(x = train_size, y = accuracy)) +
                size = .7, linetype = 2, alpha = 0.7, se = F) +
   geom_point(aes(color = Model, shape = Model)) + 
   xlab("Size of training dataset") + 
-  ylab("Accuracy") +
-  ggsave(str_c("plots/training-size-simulation.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
+  ylab("Accuracy")
+  ggsave(str_c("plots/training-size-simulation.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
   ggsave(str_c("plots/training-size-simulation.png"), width = 5*2^.5, height = 5)
 
 

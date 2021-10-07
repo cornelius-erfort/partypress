@@ -95,33 +95,37 @@ if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordve
       glove_ger_raw <- scan(file = "readme-files/wordvectors/GloVe-german.txt", what="", sep="\n")
       glove_ger <- proc_pretrained_vec(glove_ger_raw)
       glove_feat <- names(glove_ger)
-      glove_ger <- glove_ger %>% t()
+      glove_ger <- glove_ger %>% t() %>% as.matrix()
       save(glove_ger, file = "readme-files/wordvectors/glove_ger.RData")
     
       }
     
   ## Generate a word vector summary for all documents
     
-    cleaned_text <- cleanme(alldocs$htext)
-    glove_ger_mat <- glove_ger %>% as.matrix
+    # Clear env
+    rm(list = ls()[!(ls() %in% c("alldocs", "glove_ger", "seed", "issue_categories"))]) 
+    gc()
+    memory.limit()
+    memory.size()
     
     wordVec_summaries_labeled <- undergrad(
-    documentText = cleaned_text,
-    wordVecs = glove_ger_mat)
+    documentText = cleanme(alldocs$htext[alldocs$issue != -1]),
+    wordVecs = glove_ger)
     
     save(wordVec_summaries_labeled, file = "readme-files/wordvectors/wordVec_summaries_labeled.RData")
   }
 
+    
   readme_cv <- list()
   readme_time <- list()
   
-for (i in unique(alldocs$cv_sample) %>% sort) {
+for (i in unique(alldocs$cv_sample[alldocs$issue != -1]) %>% sort) {
   # Estimate category proportions
   start_readme <- Sys.time()
   readme_cv[[i]] <- readme(
     dfm = wordVec_summaries_labeled, 
-    labeledIndicator = ifelse(alldocs$cv_sample == i, 0, 1),
-    categoryVec = alldocs$issue,
+    labeledIndicator = ifelse(alldocs$cv_sample[alldocs$issue != -1] == i, 0, 1),
+    categoryVec = alldocs$issue[alldocs$issue != -1],
     nCores = 16,
     nCores_OnJob = 8) %>% suppressWarnings()
   readme_time[[i]] <- Sys.time() - start_readme
@@ -161,7 +165,7 @@ agg_eval <- dplyr::mutate(agg_eval, predicted = round(predicted, 3), truth = rou
 agg_eval$issue[agg_eval$issue == 191] <- 19.1
 agg_eval$issue[agg_eval$issue == 192] <- 19.2
 agg_eval$issue <- as.factor(as.numeric(agg_eval$issue))
-levels(agg_eval$issue) <- str_c(levels(agg_eval$issue), " - ", issue_categories[c(1:13, 16:17, 14:15), 2])
+levels(agg_eval$issue) <- str_c(levels(agg_eval$issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2])
 
 save(agg_eval, file = "readme-files/agg_eval.RData")
 
@@ -197,66 +201,63 @@ This allows us, to compare the values with those obtained from the "classify and
 if(!dir.exists("readme-files/readme-quarters")) dir.create("readme-files/readme-quarters")
 
 # Loading full dataset (not on GitHub)
-all_germany <- read_rds("data/data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id)) %>% filter(!is.na(date.x) & !is.na(text.x) & (issue != "98 Non-thematic" | is.na(issue))) %>% dplyr::rename(party = party.x, date = date.x, text = text.x)
-nrow(all_germany)
+# all_germany <- read_rds("data/data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id)) %>% filter(!is.na(date.x) & !is.na(text.x) & (issue != "98 Non-thematic" | is.na(issue))) %>% dplyr::rename(party = party.x, date = date.x, text = text.x)
+nrow(alldocs)
 
 # Unite parties
-all_germany$party <- all_germany$party %>% str_replace_all(c("union_fraktion" = "CDU/CSU", "spd_fraktion" = "SPD", "90gruene_fraktion" = "B'90/Die Grünen", "fdp_bundesverband" = "FDP", "fdp_fraktion" = "FDP", "linke_fraktion" = "DIE LINKE", "afd_bundesverband" = "AfD", "afd_fraktion" = "AfD"))
+alldocs$party <- alldocs$party %>% str_replace_all(c("union_fraktion" = "CDU/CSU", "spd_fraktion" = "SPD", "90gruene_fraktion" = "B'90/Die Grünen", "fdp_bundesverband" = "FDP", "fdp_fraktion" = "FDP", "linke_fraktion" = "DIE LINKE", "afd_bundesverband" = "AfD", "afd_fraktion" = "AfD"))
 
 # Merge categories
-all_germany$issue <- all_germany$issue %>% as.character %>% str_replace_all(c("a" = "1", "b" = "2")) %>% str_extract("[:digit:]*") %>% as.numeric
+# alldocs$issue <- alldocs$issue %>% as.character %>% str_replace_all(c("a" = "1", "b" = "2")) %>% str_extract("[:digit:]*") %>% as.numeric
 
 # Make quarterly date
-all_germany$date <- as.character(all_germany$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
+alldocs$date <- as.character(alldocs$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
+
+# Duplicate labeled as unlabeled (because otherwise they are not used for the estimated proportions)
+
+alldocs <- rbind(alldocs, filter(alldocs, issue != -1) %>% mutate(issue = -1))
 
 # Go through parties
 issue_agendas_readme <- data.frame()
-for (party in unique(all_germany$party)) {
+for (party in unique(alldocs$party)) {
   print(party)
   
   # Go through quarters
-  for (date in unique(all_germany$date)) {
+  for (date in unique(alldocs$date)) {
     print(date %>% as.Date(origin = "1970-01-01"))
     
-    if(sum((all_germany$party == party & all_germany$date == date)) == 0) next # Only   continue if there are documents for party/time
+    if(sum((alldocs$party == party & alldocs$date == date)) == 0) next # Only   continue if there are documents for party/time
     
     if(file.exists(str_c("readme-files/readme-quarters/", party %>% str_replace_all("/", "-"), "_", date %>%   as.Date(origin = "1970-01-01"), ".RData"))) { # Load if file exists
       load(str_c("readme-files/readme-quarters/", party %>% str_replace_all("/", "-"), "_", date %>% as.Date(origin =   "1970-01-01"), ".RData"))
     } else {
       
-      if(!("wordVec_summaries_all" %in% ls())) if(file.exists("readme-files/wordvectors/wordVec_summaries_all.RData")) {
+      # if(!("wordVec_summaries_all" %in% ls())) if(file.exists("readme-files/wordvectors/wordVec_summaries_all.RData")) {
   
-  load ("readme-files/wordvectors/wordVec_summaries_all.RData") } else {
+  # load ("readme-files/wordvectors/wordVec_summaries_all.RData") } else {
     
     # Read raw vector data and create vector matrix 
     # (https://deepset.ai/german-word-embeddings)
-    if(!("glove_ger" %in% ls())) if(file.exists("readme-files/wordvectors/glove_ger.RData")) {
-      load ("readme-files/wordvectors/glove_ger.RData") } else {
-      glove_ger_raw <- scan(file = "readme-files/wordvectors/GloVe-german.txt", what="", sep="\n")
-      glove_ger <- proc_pretrained_vec(glove_ger_raw)
-      glove_feat <- names(glove_ger)
-      glove_ger <- glove_ger %>% t()
-      save(glove_ger, file = "readme-files/wordvectors/glove_ger.RData")
+    if(!("glove_ger" %in% ls())) load ("readme-files/wordvectors/glove_ger.RData")
     
       }
     
   ## Generate a word vector summary for all documents
-    wordVec_summaries_all <- undergrad(
-    documentText = cleanme(str_c(all_germany$header, " - ", all_germany$text)),
-    wordVecs = glove_ger %>% as.matrix)
-    save(wordVec_summaries, file = "readme-files/wordvectors/wordVec_summaries_all.RData")
-  }
-      
-      if(!("wordVec_summaries_all" %in% ls())) {
-  load ("readme-files/wordvectors/wordVec_summaries_all.RData") }
+#  }
       
     # Subset corpus to party/time and run readme
+    
+    docs_quarter <- alldocs[(alldocs$party == party &   alldocs$date == date) | alldocs$issue != -1, ]
+    
     readme_storage <- readme(
-      dfm = wordVec_summaries_all[(all_germany$party == party &   all_germany$date == date) | !is.na(all_germany$issue), ],
-      labeledIndicator =   ifelse(is.na(all_germany$issue)[(all_germany$party == party &   all_germany$date == date) | !is.na(all_germany$issue)], 0, 1),
-      categoryVec = all_germany$issue[(all_germany$party ==   party & all_germany$date == date) | !is.na(all_germany$issue)],
-      nCores = 2,
-      nCores_OnJob = 2) %>% suppressWarnings()
+      dfm = undergrad(documentText = cleanme(docs_quarter$htext), wordVecs = glove_ger)
+      
+      labeledIndicator =  ifelse(docs_quarter$issue != -1, 1, 0)
+      
+      categoryVec = docs_quarter$issue,
+      
+      nCores = 16,
+      nCores_OnJob = 8) %>% suppressWarnings()
     
     # Save output to file
     save(readme_storage, file = str_c("readme-files/readme-quarters/", party %>% str_replace_all("/", "-"), "_", date %>%   as.Date(origin = "1970-01-01"), ".RData"))

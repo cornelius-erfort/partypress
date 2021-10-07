@@ -37,12 +37,12 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   if(is.null(data)) break
   
   if(is.null(plot_party)) plot_party <- unique(plot_data[, "party"])
-  if(is.null(plot_issue)) plot_party <- unique(plot_data[, "issue_r1"])
+  if(is.null(plot_issue)) plot_party <- unique(plot_data[, "issue"])
   
   methodname <- deparse(substitute(plot_data)) %>% str_extract("(supervised_lag)|(readme_lag)|(supervised)|(readme)") %>% str_replace("_", "-")
   
   filename <- str_c(
-                    ifelse(length(plot_issue) == 1, str_c(plot_issue, " - ", unique(plot_data$issue_r1_descr[plot_data$issue_r1 == plot_issue])), "all-issues"), 
+                    ifelse(length(plot_issue) == 1, str_c(plot_issue, " - ", unique(plot_data$issue_descr[plot_data$issue == plot_issue])), "all-issues"), 
                     "_", 
                     ifelse(length(plot_party) == 1,  plot_party %>% str_replace_all("/", "-"), "all-parties"), "_",
                     ifelse(facet, "facet", ""),
@@ -52,7 +52,7 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   
   print(filename)
 
-  thisplot <- ggplot(plot_data %>% filter(issue_r1 %in% plot_issue & party %in% plot_party), aes(x = date, y = attention)) +
+  thisplot <- ggplot(plot_data %>% filter(issue %in% plot_issue & party %in% plot_party), aes(x = date, y = attention)) +
     
     
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -123,18 +123,18 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   
   if(facet) thisplot <- thisplot + facet_wrap(~ party)
   
-  thisplot +
-    ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5) +
+  thisplot
+    ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
     ggsave(str_c("plots/", filename, ".png"), width = 5*2^.5, height = 5)
   
 }
 
 
 
-plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y = predicted)) +
+plot_agg_eval <- function(plot_data, method) { ggplot(plot_data, aes(x = truth, y = predicted)) +
   geom_abline(slope = 1, color = "grey") +
-  geom_point(shape = "O", aes(color = issue_r1)) +
-  geom_text(label = agg_eval$issue_r1 %>% levels %>% str_extract("[:digit:]{1,2}(\\.[:digit:])?"), 
+  geom_point(shape = "O", aes(color = issue)) +
+  geom_text(label = agg_eval$issue %>% levels %>% str_extract("[:digit:]{1,2}(\\.[:digit:])?"), 
             nudge_x = .001, nudge_y = -.002, hjust = "left", 
             color = "dark grey", size = 3, family = "LM Roman 10") +
   ylim(c(0, .2)) + xlim(c(0, .2)) +
@@ -144,12 +144,12 @@ plot_agg_eval <- function(plot_data, method) ggplot(plot_data, aes(x = truth, y 
   theme(legend.position = "right", # ifelse(method == "supervised", "left", "none"), 
         aspect.ratio = 1, 
         legend.text = element_text(size = 8),
-        legend.key.size =  unit(.9,"line")) +
+        legend.key.size =  unit(.9,"line")) 
   ggsave(str_c("plots/agg_eval_", method, ".pdf"), 
-         device = cairo_pdf, width = 4*2^.5, height = 4) +
+         device = cairo_pdf, width = 4*2^.5, height = 4) 
   ggsave(str_c("plots/agg_eval_", method, ".png"), 
          width = 4*2^.5, height = 4)  
 
-
+}
 
   
