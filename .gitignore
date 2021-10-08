@@ -2,6 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+.RDataTmp
 .DS_Store
 data
 scripts-issue-agendas.Rproj
