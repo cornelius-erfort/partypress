@@ -26,8 +26,6 @@ Our supervised text classification works better for some issue areas and worse f
 
 The size of the training dataset affects the accuracy of our model. Our analysis suggests that an enlargement of our training dataset would only lead to marginal performance improvements. On the contrary, the Transformers model already yields an accuracy of over 70% with only about 750 coded press releases.
 
-<!-- The MSE for predicted proportions (i.e. share of press releases concerning each issue) is 1.33%. -->
-
 # Setting up
 
 This script requires the files which are not included on GitHub.
