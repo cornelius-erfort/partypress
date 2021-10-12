@@ -47,7 +47,6 @@ source("scripts/functions.R")
 
 set.seed(1621447882) # Set a seed if you choose
 
-
 if(!dir.exists("readme-files")) dir.create("readme-files")
 
 ```
@@ -84,9 +83,9 @@ if(!("readme_cv" %in% ls())) if(file.exists("readme-files/readme_cv.RData")) { #
   
   load("readme-files/readme_cv.RData") } else { # If not load word vector and calculate summaries
     
-if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordvectors/wordVec_summaries_labeled.RData")) {
+if(!("wordVec_summaries_all" %in% ls())) if(file.exists("readme-files/wordvectors/wordVec_summaries_all.RData")) {
   
-  load ("readme-files/wordvectors/wordVec_summaries_labeled.RData") } else {
+  load ("readme-files/wordvectors/wordVec_summaries_all.RData") } else {
     
     # Read raw vector data and create vector matrix 
     # (https://deepset.ai/german-word-embeddings)
@@ -108,11 +107,11 @@ if(!("wordVec_summaries_labeled" %in% ls())) if(file.exists("readme-files/wordve
     memory.limit()
     memory.size()
     
-    wordVec_summaries_labeled <- undergrad(
-    documentText = cleanme(alldocs$htext[alldocs$issue != -1]),
+    wordVec_summaries_all <- undergrad(
+    documentText = alldocs[alldocs$issue != -1, ],
     wordVecs = glove_ger)
     
-    save(wordVec_summaries_labeled, file = "readme-files/wordvectors/wordVec_summaries_labeled.RData")
+    save(wordVec_summaries_all, file = "readme-files/wordvectors/wordVec_summaries_all.RData")
   }
 
     
@@ -123,7 +122,7 @@ for (i in unique(alldocs$cv_sample[alldocs$issue != -1]) %>% sort) {
   # Estimate category proportions
   start_readme <- Sys.time()
   readme_cv[[i]] <- readme(
-    dfm = wordVec_summaries_labeled, 
+    dfm = wordVec_summaries_all[alldocs$issue != -1, ], 
     labeledIndicator = ifelse(alldocs$cv_sample[alldocs$issue != -1] == i, 0, 1),
     categoryVec = alldocs$issue[alldocs$issue != -1],
     nCores = 16,
@@ -140,53 +139,55 @@ for (i in unique(alldocs$cv_sample[alldocs$issue != -1]) %>% sort) {
 
 In order to evaluate the performance of readme2, we compare the predicted proportions in the test data with the true values. We present a table and plot to illustrate the link between predicted and true values.
 
-``` {r agg_eval}
+``` {r readme_agg}
 # Prediction estimate and truth in %
-agg_eval <- data.frame()
+readme_agg <- data.frame()
 for (i in 1:length(readme_cv)) {
   readme.estimates <- readme_cv[[i]]
   readme.estimates$point_readme
   
-  agg_eval <- data.frame(
+  readme_agg <- data.frame(
     issue = attr(readme.estimates$point_readme, "names"), 
     predicted = readme.estimates$point_readme %>% as.vector(),
     truth = (table(alldocs$issue[alldocs$cv_sample == i])/sum(table(alldocs$issue[alldocs$cv_sample == i]))) %>% as.vector(),
     cv_sample = i
-) %>% rbind.fill(agg_eval)
+) %>% rbind.fill(readme_agg)
   
 }
 
 # Difference in percentage points (positive values indicate an inflated prediction, i.e. we estimate a higher share for the category compared to the truth)
-agg_eval$difference <- agg_eval$predicted - agg_eval$truth
+readme_agg$difference <- readme_agg$predicted - readme_agg$truth
 
-agg_eval <- dplyr::mutate(agg_eval, predicted = round(predicted, 3), truth = round(truth, 3), difference = round(difference, 3))
+readme_agg <- dplyr::mutate(readme_agg, predicted = round(predicted, 3), truth = round(truth, 3), difference = round(difference, 3))
 
 # Change and order labels
-agg_eval$issue[agg_eval$issue == 191] <- 19.1
-agg_eval$issue[agg_eval$issue == 192] <- 19.2
-agg_eval$issue <- as.factor(as.numeric(agg_eval$issue))
-levels(agg_eval$issue) <- str_c(levels(agg_eval$issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2])
-
-save(agg_eval, file = "readme-files/agg_eval.RData")
+readme_agg$issue[readme_agg$issue == 191] <- 19.1
+readme_agg$issue[readme_agg$issue == 192] <- 19.2
+readme_agg$issue <- as.factor(as.numeric(readme_agg$issue))
+levels(readme_agg$issue) <- str_c(levels(readme_agg$issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2])
 
 # Write latex table
 if(!dir.exists("tables")) dir.create("tables")
-# latex_out <- capture.output(stargazer(agg_eval %>% dplyr::group_by(issue) %>% 
-#   dplyr::summarise(predicted = mean (predicted),
-#             truth = mean(truth)) %>%
-#   dplyr::rename(issue = issue) %>% as.data.frame() %>%
-#   stargazer(summary = F, rownames = F, 
-#             title = "Evaluation of aggregate values (readme2)", 
-#             label = "tab:agg_eval_readme", 
-#             notes = "Mean values from five-fold cross-validation."), 
-#   out = "tables/agg_eval_readme.tex"))
+latex_out <- capture.output(stargazer(readme_agg %>% dplyr::group_by(issue) %>%
+  dplyr::summarise(predicted = mean (predicted),
+            truth = mean(truth)) %>%
+  dplyr::rename(issue = issue) %>% as.data.frame() %>%
+  stargazer(summary = F, rownames = F,
+            title = "Evaluation of aggregate values (readme2)",
+            label = "tab:readme_agg_readme",
+            notes = "Mean values from five-fold cross-validation."),
+  out = "tables/readme_agg_readme.tex"))
 
 # Plot aggregate evaluation
 if(!dir.exists("plots")) dir.create("plots")
 
-plot_agg_eval(agg_eval %>% dplyr::group_by(issue) %>% 
+plot_agg_eval(readme_agg %>% dplyr::group_by(issue) %>% 
   dplyr::summarise(predicted = mean (predicted),
             truth = mean(truth)), "readme")
+
+readme_agg <- readme_agg %>% dplyr::rename(Issue = issue, prediction = predicted) %>% select(-c(cv_sample, difference)) %>% dplyr::group_by(Issue) %>% dplyr::mutate(prediction = mean(prediction), truth = mean(truth), model = "Readme") %>% unique()
+
+save(readme_agg, file = "readme-files/readme_agg.RData")
 
 ```
 
@@ -201,11 +202,14 @@ This allows us, to compare the values with those obtained from the "classify and
 if(!dir.exists("readme-files/readme-quarters")) dir.create("readme-files/readme-quarters")
 
 # Loading full dataset (not on GitHub)
+load("readme-files/alldocs.RData")
 # all_germany <- read_rds("data/data_joint.RDS") %>% select(c(header, text.x, date.x, issue, party.x, id)) %>% filter(!is.na(date.x) & !is.na(text.x) & (issue != "98 Non-thematic" | is.na(issue))) %>% dplyr::rename(party = party.x, date = date.x, text = text.x)
+
 nrow(alldocs)
 
 # Unite parties
 alldocs$party <- alldocs$party %>% str_replace_all(c("union_fraktion" = "CDU/CSU", "spd_fraktion" = "SPD", "90gruene_fraktion" = "B'90/Die Grünen", "fdp_bundesverband" = "FDP", "fdp_fraktion" = "FDP", "linke_fraktion" = "DIE LINKE", "afd_bundesverband" = "AfD", "afd_fraktion" = "AfD"))
+table(alldocs$party)
 
 # Merge categories
 # alldocs$issue <- alldocs$issue %>% as.character %>% str_replace_all(c("a" = "1", "b" = "2")) %>% str_extract("[:digit:]*") %>% as.numeric
@@ -215,7 +219,16 @@ alldocs$date <- as.character(alldocs$date) %>% substr(1, 8) %>% str_c("15") %>% 
 
 # Duplicate labeled as unlabeled (because otherwise they are not used for the estimated proportions)
 
+load ("readme-files/wordvectors/wordVec_summaries_all.RData") 
+nrow(wordVec_summaries_all)
+
+wordVec_summaries_all <- rbind(wordVec_summaries_all, wordVec_summaries_all[alldocs$issue != -1, ])
+nrow(wordVec_summaries_all)
+
 alldocs <- rbind(alldocs, filter(alldocs, issue != -1) %>% mutate(issue = -1))
+nrow(alldocs)
+table(alldocs$issue == -1)
+table(alldocs$cv_sample)
 
 # Go through parties
 issue_agendas_readme <- data.frame()
@@ -232,32 +245,18 @@ for (party in unique(alldocs$party)) {
       load(str_c("readme-files/readme-quarters/", party %>% str_replace_all("/", "-"), "_", date %>% as.Date(origin =   "1970-01-01"), ".RData"))
     } else {
       
-      # if(!("wordVec_summaries_all" %in% ls())) if(file.exists("readme-files/wordvectors/wordVec_summaries_all.RData")) {
-  
-  # load ("readme-files/wordvectors/wordVec_summaries_all.RData") } else {
-    
-    # Read raw vector data and create vector matrix 
-    # (https://deepset.ai/german-word-embeddings)
-    if(!("glove_ger" %in% ls())) load ("readme-files/wordvectors/glove_ger.RData")
-    
-      }
-    
-  ## Generate a word vector summary for all documents
-#  }
       
     # Subset corpus to party/time and run readme
     
-    docs_quarter <- alldocs[(alldocs$party == party &   alldocs$date == date) | alldocs$issue != -1, ]
+    docs_quarter <- wordVec_summaries_all[(alldocs$party == party & alldocs$date == date) | alldocs$issue != -1, ] # All docs belonging to party/quarter plus all labeled docs
+    vars_quarter <-  alldocs[(alldocs$party == party & alldocs$date == date) | alldocs$issue != -1, ] # All docs belonging to party/quarter plus all labeled docs
     
     readme_storage <- readme(
-      dfm = undergrad(documentText = cleanme(docs_quarter$htext), wordVecs = glove_ger)
-      
-      labeledIndicator =  ifelse(docs_quarter$issue != -1, 1, 0)
-      
-      categoryVec = docs_quarter$issue,
-      
+      dfm = docs_quarter,
+      labeledIndicator =  ifelse(vars_quarter$issue != -1, 1, 0),
+      categoryVec = ifelse(vars_quarter$issue == -1, NA, vars_quarter$issue),
       nCores = 16,
-      nCores_OnJob = 8) %>% suppressWarnings()
+      nCores_OnJob = 8) # %>% suppressWarnings()
     
     # Save output to file
     save(readme_storage, file = str_c("readme-files/readme-quarters/", party %>% str_replace_all("/", "-"), "_", date %>%   as.Date(origin = "1970-01-01"), ".RData"))
