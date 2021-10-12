@@ -26,7 +26,7 @@ We achieve the highest accuracy using Transformer models. For the German press r
 
 ### Comparison of classification methods
 
-*Aggregated predictions across 17 categories*
+*Aggregated predictions across 23 categories*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="80%">
 
 *Issue attention over time of German parties to issue "7 - Environment and Energy" (Transformers GBERT)* 
