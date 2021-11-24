@@ -255,8 +255,8 @@ for (party in unique(alldocs$party)) {
       dfm = docs_quarter,
       labeledIndicator =  ifelse(vars_quarter$issue != -1, 1, 0),
       categoryVec = ifelse(vars_quarter$issue == -1, NA, vars_quarter$issue),
-      nCores = 16,
-      nCores_OnJob = 8) # %>% suppressWarnings()
+      nCores = 2,
+      nCores_OnJob = 1) # %>% suppressWarnings()
     
     # Save output to file
     save(readme_storage, file = str_c("readme-files/readme-quarters/", party %>% str_replace_all("/", "-"), "_", date %>%   as.Date(origin = "1970-01-01"), ".RData"))
