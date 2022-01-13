@@ -64,10 +64,10 @@ names(alldocs) <- c("label",  "id")
 
 # Translate labels back into CAP issues
 labels <- read_csv("transfer-files/bert-pred.csv", col_names = F)[, 2:3] %>% unique
-names(labels) <- c("issue_r1", "label")
-labels$issue_r1[labels$issue_r1 == 191] <- 19.1
-labels$issue_r1[labels$issue_r1 == 192] <- 19.2
-labels$issue_r1 <- factor(labels$issue_r1, levels = c(1:7, 9:10, 12, 15:17, 19.1, 19.2, 20, 99))
+names(labels) <- c("issue", "label")
+labels$issue[labels$issue == 191] <- 19.1
+labels$issue[labels$issue == 192] <- 19.2
+labels$issue <- factor(labels$issue, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
 alldocs <- merge(alldocs, labels, by = "label") %>% select(-c(label))
 
 # Load and merge unlabeled data
@@ -77,11 +77,11 @@ alldocs <- merge(germany, alldocs, by = "id")
 nrow(germany)
 
 # Table of predicted issues 
-table(alldocs$issue_r1) %>% as.data.frame() %>% 
+table(alldocs$issue) %>% as.data.frame() %>% 
   dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
   kable_styling(latex_options = "scale_down")
 
-table(alldocs$issue_r1) / nrow(alldocs)
+table(alldocs$issue) / nrow(alldocs)
 
 # Clean party names
 party_names <- data.frame(party = c("90gruene_fraktion",
@@ -98,17 +98,17 @@ nrow(alldocs)
 
 # Tables for samples of press releases
 # Environment
-sample7 <- select(alldocs, c("party_name", "date", "header", "issue_r1")) %>% filter(issue_r1 == 7)
+sample7 <- select(alldocs, c("party_name", "date", "header", "issue")) %>% filter(issue == 7)
 (sample7 <- sample7[sample(1:nrow(sample7), 10), ])
 
 latex_out <- capture.output(sample7 %>% dplyr::rename(party = party_name, title = header) %>%
   stargazer(type = "latex", summary = F, rownames = F, 
-            title = "Sample of press releases classified as category 7 - Environment and Energy", label = "tab:7-document-samples"))
+            title = "Sample of press releases classified as category 7 - Environment", label = "tab:7-document-samples"))
 
 latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{stX") %>% cat(sep = "\n"), file = "tables/7-document-samples.tex")
 
 # Immigration
-sample9 <- select(alldocs, c("party_name", "date", "header", "issue_r1")) %>% filter(issue_r1 == 9)
+sample9 <- select(alldocs, c("party_name", "date", "header", "issue")) %>% filter(issue == 9)
 (sample9 <- sample9[sample(1:nrow(sample9), 10), ])
 
 latex_out <- capture.output(sample9 %>% dplyr::rename(party = party_name, title = header) %>%
@@ -126,7 +126,7 @@ To measure parties' evolving issue agendas, we aggregate the category counts ove
 ```{r aggregation}
 
 # Create dataframe with only necessary vars
-issue_agendas <- alldocs %>% select(c(date, issue_r1, party_name)) %>% dplyr::rename(party = party_name)
+issue_agendas <- alldocs %>% select(c(date, issue, party_name)) %>% dplyr::rename(party = party_name)
 
 # Make date quarterly
 issue_agendas$date <- as.character(issue_agendas$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
@@ -135,15 +135,15 @@ issue_agendas$date <- as.character(issue_agendas$date) %>% substr(1, 8) %>% str_
 issue_agendas$freq <- 1
 
 # Aggregate by party, date and issue
-issue_agendas <- aggregate(freq ~ party + date + issue_r1, issue_agendas, sum)
+issue_agendas <- aggregate(freq ~ party + date + issue, issue_agendas, sum)
 
 # Add observations with zero documents
 for (thisparty in unique(issue_agendas$party)) {
   for(thisdate in unique(issue_agendas$date[issue_agendas$party == thisparty])) {
-    for(thisissue in unique(issue_agendas$issue_r1)) {
-      if(nrow(issue_agendas[issue_agendas$party == thisparty & issue_agendas$date == thisdate & issue_agendas$issue_r1 == thisissue, ]) == 0 & nrow(issue_agendas[issue_agendas$party == thisparty & issue_agendas$date == thisdate, ]) != 0) {
+    for(thisissue in unique(issue_agendas$issue)) {
+      if(nrow(issue_agendas[issue_agendas$party == thisparty & issue_agendas$date == thisdate & issue_agendas$issue == thisissue, ]) == 0 & nrow(issue_agendas[issue_agendas$party == thisparty & issue_agendas$date == thisdate, ]) != 0) {
         issue_agendas <- data.frame(
-          party = thisparty,date = thisdate, issue_r1 = thisissue, freq = 0
+          party = thisparty,date = thisdate, issue = thisissue, freq = 0
           ) %>% rbind.fill(issue_agendas)
 }}}}
 
@@ -154,14 +154,13 @@ issue_agendas$attention <- issue_agendas$freq / issue_agendas$party_sum
 
 # Add issue descriptions
 issue_categories <- 
-  data.frame(issue_r1 = c(1:7, 9:10, 12, 15:17, 191:192, 20, 99), 
-             issue_r1_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Environment and Energy", 
-                                "Immigration", "Welfare", "Law and Crime", "Commerce", "Defense", 
-                                "Technology", "International Affairs", "EU",
-                                "Government Operations", "Other"))
+  data.frame(issue = c(1:10, 12:18, 191:192, 20, 23, 98, 99), 
+             issue_descr = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", 
+              "Environment", "Energy", "Immigration", "Transportation", "Law and Crime", 
+              "Social Welfare", "Housing", "Domestic Commerce", "Defense", "Technology", 
+              "Foreign Trade", "International Affairs", "European Integration", "Government Operations", "Culture", "Non-thematic", "Other"))
 
-issue_agendas <- merge(issue_agendas, issue_categories, by = "issue_r1") %>% select(-c(freq))
+issue_agendas <- merge(issue_agendas, issue_categories, by = "issue") %>% select(-c(freq))
 
 issue_agendas$date <- issue_agendas$date %>% as.Date(origin = "1970-01-01")
 
