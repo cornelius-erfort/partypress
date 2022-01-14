@@ -554,32 +554,47 @@ trainsize_ridge <- c(5, 25, 50, 100, 200, 300, 400, 500, 600, 700, 1000, 1500, 1
 trainsize_ridge <- data.frame(Model = "Ridge (L2)",
                               train_size = trainsize_ridge)
 
-trainsize_ridge$accuracy <- sapply(trainsize_ridge$train_size, FUN = function (x) {
-  sub_train <- sample(1:ndoc(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)), x)
-  ridge_opt_mod <- textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)[sub_train, ], dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 5)$issue[sub_train], type = 7)
-  accuracy(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 5)$issue, predict(ridge_opt_mod, newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 5)))}) %>% unlist
+load("other-countries/textpress.RData")
+corp_press <- corpus(textpress$htext,
+                       docvars = select(textpress, c(country, issue, party, cv_sample)))
+dfmat_alt <- corpus_subset(corp_press, country == "spain" & !is.na(issue)) %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>%
+    dfm(remove = stopwords("es"), # Stem and remove stopwords, punctuation etc.
+        remove_punct = T, remove_number = T, remove_symbols = T, remove_url =   T) %>% dfm_wordstem(language = "es") %>%
+    dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
+             docfreq_ = "prop") %>%
+     dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
+             docfreq_ = "count")
 
-# Load the results from GBERT transformer models
-trainsize_transfer <- read_csv("transfer-files/results-training-size.csv", col_names = F)
+trainsize_ridge$accuracy <- sapply(trainsize_ridge$train_size, FUN = function (x) {
+  sub_train <- sample(1:ndoc(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)), x)
+  ridge_opt_mod <- textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)[sub_train, ], dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue[sub_train], type = 7)
+  accuracy(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue, predict(ridge_opt_mod, newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)))}) %>% unlist
+
+# Load the results from BETO transformer models
+trainsize_transfer <- read_csv("other-countries/results-training-size-beto.csv", col_names = F)
 names(trainsize_transfer) <- c("accuracy", "train_size")
-trainsize_transfer$Model <- "GBERT"
+trainsize_transfer$Model <- "Transformers"
 train_size <- rbind(trainsize_transfer, trainsize_ridge)
 
 # Load the results from multilingual transformer models
-trainsize_multi <- read_csv("other-countries/results-training-size.csv", col_names = F)
+trainsize_multi <- read_csv("other-countries/results-training-size-multilingual.csv", col_names = F)
 names(trainsize_multi) <- c("accuracy", "train_size")
-trainsize_multi$Model <- "Multi-lingual"
+trainsize_multi$Model <- "Transformers (multilingual)"
 train_size <- rbind(train_size, trainsize_multi)
 
 ggplot(train_size, aes(x = train_size, y = accuracy)) + 
-  theme(text = element_text(size = 16)) +
+  theme(text = element_text(size = 16),
+        legend.position = "bottom") +
   # geom_smooth(aes(color = Model, lty = Model), method = "loess", formula = "y ~ x", se = F) +
   geom_line(aes(group = Model, color = Model, lty = Model),
                stat="smooth", method = "loess", formula = "y ~ x",
                size = .7, linetype = 2, alpha = 0.7, se = F) +
   geom_point(aes(color = Model, shape = Model)) + 
   xlab("Size of training dataset") + 
-  ylab("Accuracy")
+  ylab("Accuracy") +
+  xlim(c(NA, 2000))
+
   ggsave(str_c("plots/training-size-simulation.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
   ggsave(str_c("plots/training-size-simulation.png"), width = 5*2^.5, height = 5)
 

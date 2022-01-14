@@ -151,7 +151,7 @@ if(!file.exists("other-countries/textpress.RData")) save(textpress, file = "othe
 
 ```{r tm-ridge}
 
-corp_press <- corpus(str_c(textpress$header, " ", textpress$text),
+corp_press <- corpus(textpress$htext,
                        docvars = select(textpress, c(country, issue, party, cv_sample)))
 
 ridge_eval <- data.frame()

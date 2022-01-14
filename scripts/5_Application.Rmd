@@ -30,7 +30,7 @@ At the end of this script, the file "issue_agendas.RData" is saved. It contains 
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "ggrepel")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -180,6 +180,39 @@ plot_issue_agenda(issue_agendas, 7,  unique(issue_agendas$party), T)
 # Immigration
 plot_issue_agenda(issue_agendas, 9,  unique(issue_agendas$party), T) 
 
+
+# All parties in one plot
+plot_issue_agenda(issue_agendas, unique(issue_agendas$party), T)
+
+
+
+# Show spike in attention to immigration
+spec_att <- issue_agendas %>% filter(issue %in% c(7, 9)) # & party != "AfD")
+spec_att$time <- ""
+spec_att$time[spec_att$date >= ymd("2015-01-01") & spec_att$date <= ymd("2015-12-31") & spec_att$issue == 9] <- "2015" 
+spec_att$time[spec_att$date >= ymd("2014-01-01") & spec_att$date <= ymd("2014-12-31") & spec_att$issue == 9] <- "2014"
+spec_att$time[spec_att$date >= ymd("2018-01-01") & spec_att$date <= ymd("2018-12-31") & spec_att$issue == 7] <- "2018" 
+spec_att$time[spec_att$date >= ymd("2017-01-01") & spec_att$date <= ymd("2017-12-31") & spec_att$issue == 7] <- "2017" 
+# spec_att$time[spec_att$date >= ymd("2011-01-01") & spec_att$date <= ymd("2011-12-31") & spec_att$issue == 7] <- "2011" 
+spec_att <- filter(spec_att, time != "")  %>% aggregate(attention ~ party + time + issue, ., mean)
+spec_att$issue[spec_att$issue == 7] <- "7 - Environment"
+spec_att$issue[spec_att$issue == "9"] <- "9 - Immigration"
+filename <- "all-parties_facet_supervised-change"
+# setwd("/Users/cornelius/Desktop/SCRIPTS/GitHub/scripts-issue-agendas/")
+ggplot(spec_att, aes(x = time, y = attention)) +
+  theme(text = element_text(size = 14)) +
+  ylab("Share of press releases per year") +
+  geom_point(aes(color = party, shape = party)) +
+  geom_line(aes(group = party, color = party), lty = 2, alpha = .5) +
+  geom_text_repel(data = spec_att[spec_att$time %in% c("2017", "2014"), ], aes(x = spec_att[spec_att$time %in% c("2017", "2014"), "time"], y = spec_att[spec_att$time %in% c("2017", "2014"), "attention"]), label = round(spec_att[spec_att$time %in% c("2017", "2014"), "attention"], 2), hjust = "left", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25,  min.segment.length = .1, point.padding = .5, max.overlaps = 100, nudge_x = -.25) +
+  geom_text_repel(data = spec_att[!(spec_att$time %in% c("2017", "2014")), ], aes(x = spec_att[!(spec_att$time %in% c("2017", "2014")), "time"], y = spec_att[!(spec_att$time %in% c("2017", "2014")), "attention"]), label = round(spec_att[!(spec_att$time %in% c("2017", "2014")), "attention"], 2), hjust = "right", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, min.segment.length = .1, point.padding = .5, max.overlaps = 100, nudge_x = .25) +
+  scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red")) + #"blue", 
+  facet_grid(~ issue, scales = "free_x")
+  
+  
+  ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+  
+  ggsave(str_c("plots/", filename, ".png"), width = 5*2^.5, height = 5)
 
 ```
 
