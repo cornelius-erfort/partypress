@@ -29,8 +29,8 @@ We achieve the highest accuracy using Transformer models. For the German press r
 *Aggregated predictions across 23 categories*
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/agg_eval_compare_facet.png" width="80%">
 
-*Issue attention over time of German parties to issue "7 - Environment and Energy" (Transformers GBERT)* 
-<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/7%20-%20Environment%20and%20Energy_all-parties_facet.png" width="80%">
+*Issue attention over time of German parties to issue "7 - Environment" (Transformers GBERT)* 
+<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/raw/main/plots/7%20-%20Environment_all-parties_facet.png" width="80%">
 
 The vertical line indicates the start of the Friday for Future protests.
 
