@@ -36,9 +36,10 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "remotes", "devtools")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "remotes", "devtools", "tidyr")
 
 # lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages) # Windows doesn't like this...
+
 
 if(!("quanteda.classifiers" %in% rownames(installed.packages()))) {
   remotes::install_github("quanteda/quanteda.classifiers")
@@ -49,290 +50,315 @@ invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = 
 loadfonts(device = "pdf")
 theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
 
-if(!dir.exists("supervised-files")) dir.create("supervised-files")
-
 source("scripts/functions.R")
 
 # Seed
 seed <- 1621447882
 set.seed(seed)
 
-# Five-fold cross-validation
+# Five-fold cross-validation (except Elastic Net and Random Forest)
 folds_cv <- 5 
+
+load("files/press.RData")
 ```
 
-## Loading document frequency matrix (dfm)
 
-The sample data for Germany consists of 2,612 labeled press releases. The dataset is not uploaded on GitHub.
+```{r supervised}
 
-In order to improve the classification, similar topics were merged or subsumed under the "Other" category. In practice, press releases regarding, for instance, Environment and Energy are often not distinguishable. Furthermore, small categories with very few observations are not suitable for automated classification.
+presscorpus <- corpus(str_c(press$header, " ", press$text),
+                       docvars = select(press, c(country, id, issue, party_name, cv_sample)))
 
-The dfm is generated in the script "Preparing the textual data".
+if(!file.exists("files/tm_eval.RData")) load("files/tm_eval.RData") else tm_eval <- data.frame()
 
-We create a text corpus based on the header and text of each press release. We draw a random sample from the corpus to create a training and a test dataset. The test dataset consists of approx. one fifth of the documents.
+for (country in press$country %>% unique) {
+  print(country)
+  
+  countrycorpus <-  presscorpus[presscorpus$country == country & presscorpus$cv_sample != -1, ]
+  ndoc(countrycorpus) %>% print
+  
+  # Stopwords
+  if(country == "poland") countrystop <-  stopwords::stopwords("pl", source = "stopwords-iso") else countrystop <- stopwords(str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl", "ireland" = "en", "uk" = "en", "sweden" = "sw", "denmark" = "da")))
+  countrystop
 
-Subsequently, we follow standard procedures for the preparation of the document frequency matrix. First, we remove stopwords and stem the words in order to better capture the similarities across documents. Second, we remove all punctuation, numbers, symbols and URLs. In a last step, we remove all words occurring in less than 0.5% or more than 90% of documents.
-
-To test the robustness of the dfm representation, we run additional models with an alternative dfm. This dfm contains bigrams and is limited to features occuring in at least 5 (count) and at most 6% of the documents. The dfm is tfidf transformed.
-
-
-```{r dfm}
-load("supervised-files/data/dfmat.RData")
-load("supervised-files/data/dfmat_alt.RData")
-```
-
-# Textmodels
-
-Following Barberá et al. (2021) we estimate the following models:
-
-1. Naive Bayes (multinomial)
-2. Ridge regression (L2)
-3. Lasso regression (L1)
-4. Elastic Net
-5. SVM
-6. Random Forest
-
-(Barberá, P., Boydstun, A., Linn, S., McMahon, R., & Nagler, J. (2021). Automated Text Classification of News Articles: A Practical Guide. Political Analysis, 29(1), 19-42. doi:10.1017/pan.2020.8)
-
-We are mainly using the R packages quanteda and LiblineaR for the textmodels. For the SuperLearner ensemble we are replicating the models in Python with the sklearn library and use the mlens library to build the ensemble.
-
-For most classifications we use a five-fold cross-validation.
-
-An overview of the results for each classifier can be found in the next section.
-
-## Naive Bayes (multinomial)
-
-We calculate a Multinomial Naive Bayes (NB) text classification model. Multinomial NB models take into account the number of times a word occurs in a document, whereas Bernoulli NB models use the presence or absence of words only. We also test whether a Bernoulli NB model potentially outperforms the multinomial one.
-
-```{r tm-naivebayes}
-
-# The textmodels are all saved in a directory. When the parameters are changed, the folder "textmodels" should be deleted in order to re-run the models.
-
-# Five-fold cross-validation for every possible parameter combination
-if(!dir.exists("supervised-files/textmodels")) dir.create("supervised-files/textmodels")
-filename <- "supervised-files/textmodels/naivebayes_eval.RData"
-if(file.exists(filename)) load(filename) else {
-  naivebayes_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed,
+  # Create dfm
+  dfmat <- countrycorpus %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(min_docfreq = 0.005, max_docfreq = .9, # Remove words occurring <.5% or > 80% of docs
+             docfreq_ = "prop") %>%
+    suppressWarnings()
+  
+  # Create alternative dfm (bigrams and tfidf)
+  dfmat_alt <- countrycorpus %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
+             docfreq_ = "prop") %>%
+    dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
+             docfreq_ = "count") %>% suppressWarnings()
+  
+  ##############
+  # 1 Naive bayes
+  ##############
+  model_name <- "Naive bayes"
+  model_id <- 1
+  print(model_name)
+  print(model_id)
+   if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) tm_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed,
             model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"),
-            parameters = list(prior = c("uniform", "docfreq", "termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3))) %>% dplyr::rename(weight = prior)
+            parameters = list(prior = c("termfreq"), distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)), by_class = T) %>% 
+     dplyr::rename(weight = prior) %>% 
+     mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+     rbind.fill(tm_eval)
   
-  # Add alternative dfm (with bigrams and max_docfreq 20%)
-  naivebayes_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed,
+
+  
+  ## with alternative DFM
+  model_id <- model_id + 1
+  print(model_id)
+  if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id)))  tm_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed,
             model = "textmodel_nb", fun = c("accuracy", "precision", "recall", "f1_score"),
-            parameters = list(distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3))) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(naivebayes_eval)
+            parameters = list(distribution = c("multinomial", "Bernoulli"), smooth = c(1, 2, 3)), by_class = T) %>% 
+    dplyr::mutate(weight = "tfidf") %>% 
+    mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+    rbind.fill(tm_eval)
   
-  naivebayes_eval$model <- "Naive bayes"
-  save(naivebayes_eval, file = filename)
+  
+  ##############
+  # 2 Ridge regression (L2)
+  ##############
+  model_name <- "Ridge (L2)"
+  model_id <- model_id + 1
+  print(model_name)
+  print(model_id)
+   if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) tm_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), 
+      parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0, 7)), by_class = T) %>% 
+     mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+     rbind.fill(tm_eval)
+  
+  ## with alternative DFM
+  model_id <- model_id + 1
+  print(model_id)
+  if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id)))  tm_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = c(0, 7)), by_class = T) %>% 
+    dplyr::mutate(weight = "tfidf") %>% 
+    mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+    rbind.fill(tm_eval)
+  
+  
+  ##############
+  # 3 Lasso regression (L1)
+  ##############
+  model_name <- "Lasso (L1)"
+  model_id <- model_id + 1
+  print(model_name)
+  print(model_id)
+   if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) tm_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6), by_class = T) %>% 
+     mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+     rbind.fill(tm_eval)
+  
+  ## with alternative DFM
+  model_id <- model_id + 1
+  print(model_id)
+  if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id)))  tm_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 6), by_class = T) %>% 
+    dplyr::mutate(weight = "tfidf") %>% 
+    mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+    rbind.fill(tm_eval)
+  
+  ##############
+  # 4 SVM
+  ##############
+  model_name <- "SVM"
+  model_id <- model_id + 1
+  print(model_name)
+  print(model_id)
+   if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) tm_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4), by_class = T) %>% 
+     mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+     rbind.fill(tm_eval)
+  
+  ## with alternative DFM
+  model_id <- model_id + 1
+  print(model_id)
+  if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id)))  tm_eval <-   textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 4), by_class = T) %>% 
+    dplyr::mutate(weight = "tfidf") %>% 
+    mutate(model_name = model_name, country = country, model_id = model_id) %>% 
+    rbind.fill(tm_eval)
+  
+  
+  ##############
+  # 5 Elastic net
+  ##############
+  model_name <- "Elastic net"
+  model_id <- model_id + 1
+  print(model_name)
+  print(model_id)
+   if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) {
+     
+     
+     # Register multicore backend 
+     registerDoMC(cores = 4) 
+     
+     eval_start <- Sys.time()
+     elasticnet_mod <- glmnet(x = dfm_subset(dfmat, dfmat$cv_sample != 1), 
+                              y = dfm_subset(dfmat, dfmat$cv_sample != 1)$issue, 
+                              family = "multinomial", 
+                              alpha = 0.5, 
+                              type.measure = "class", standardize = T) 
+     eval_end <- Sys.time()
+     
+     # Get lambda with best accuracy
+     elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class")
+     acc_list <- apply(elasticnet_pred, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
+     elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class", s = elasticnet_mod$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
+     elastic_net_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
+
+     
+     model_eval <- data.frame(accuracy = accuracy(elasticnet_pred, elastic_net_test$issue), 
+           time = as.numeric(eval_end - eval_start),
+           seed = seed,
+           weight = "uniform",
+           model_name = model_name,
+           model_id = model_id,
+           alpha = .5,
+           distribution = "multinomial",
+           country = country)
+     
+     add_param <- cbind(quanteda.classifiers::precision(elasticnet_pred, elastic_net_test$issue) %>% as.data.frame(), 
+                        quanteda.classifiers::recall(elasticnet_pred, elastic_net_test$issue) %>% as.data.frame(), 
+                        quanteda.classifiers::f1_score(elasticnet_pred, elastic_net_test$issue)  %>% as.data.frame() %>% mutate(class = rownames(.)))  %>% mutate(country = country)
+     
+     tm_eval <- merge(model_eval, add_param, by = "country") %>% rbind.fill(tm_eval)
+     
+   }
+       
+     
+     
+      ## with alternative DFM
+      model_id <- model_id + 1
+      print(model_id)
+      
+
+      if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id)))  {
+        
+
+        # Get lambda with best accuracy
+        eval_start <- Sys.time()
+        elasticnet_mod_alt <- glmnet(x = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1), 
+                                     y = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue,
+                                     family = "multinomial", 
+                                     alpha = 0.5,
+                                     type.measure = "class", standardize = T) 
+        eval_end <- Sys.time()
+        
+        elasticnet_pred_alt <- predict(elasticnet_mod_alt, newx = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class")
+        acc_list <- apply(elasticnet_pred_alt, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
+
+        elasticnet_pred_alt <- predict(elasticnet_mod_alt, newx = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class", s = elasticnet_mod_alt$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
+        elastic_net_test_alt <- dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)
+        
+        model_eval <- data.frame(accuracy = accuracy(elasticnet_pred_alt, elastic_net_test_alt$issue), 
+               time = as.numeric(eval_end - eval_start),
+               seed = seed,
+               weight = "tfidf",
+               model_name = model_name,
+               model_id = model_id,
+               alpha = .5,
+               distribution = "multinomial",
+              country = country)
+        
+        add_param <- cbind(quanteda.classifiers::precision(elasticnet_pred_alt, elastic_net_test_alt$issue) %>% as.data.frame(), 
+                           quanteda.classifiers::recall(elasticnet_pred_alt, elastic_net_test_alt$issue) %>% as.data.frame(), 
+                           quanteda.classifiers::f1_score(elasticnet_pred_alt, elastic_net_test_alt$issue)  %>% as.data.frame() %>% mutate(class = rownames(.)))  %>% mutate(country = country)
+     
+     tm_eval <- merge(model_eval, add_param, by = "country") %>% rbind.fill(tm_eval)
+        
+        
+        
+      }
+     
+
+    ##############
+    #  6 Random forest
+    ##############
+    # model_name <- "Random forest"
+    # model_id <- model_id + 1
+    # print(model_name)
+    # print(model_id)
+    # if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) {
+    #   # Estimate model (100 trees)
+    #   eval_start <- Sys.time()
+    #   randomforest_eval <-  randomForest(x = as.matrix(dfm_subset(dfmat, dfmat$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))), y = as.factor(dfm_subset(dfmat, dfmat$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))$issue),
+    #                    xtest = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat, dfmat$cv_sample == 1)$issue),
+    #                    importance = T, mtry = 20, ntree = 100,
+    #                    keep.forest = T, type = "class")
+    #   eval_end <- Sys.time()
+    # 
+    # randomforest_pred <- predict(randomforest_eval, newdata = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class")
+    # randomforest_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
+    # 
+    # 
+    #  model_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$issue),
+    #            time = as.numeric(eval_end - eval_start),
+    #            seed = seed,
+    #            weight = "uniform",
+    #            model_name = model_name,
+    #            model_id = model_id,
+    #            alpha = .5,
+    #            distribution = "multinomial",
+    #            country = country)
+    # 
+    #     add_param <- cbind(quanteda.classifiers::precision(randomforest_pred, randomforest_test$issue) %>% as.data.frame(),
+    #                        quanteda.classifiers::recall(randomforest_pred, randomforest_test$issue) %>% as.data.frame(),
+    #                        quanteda.classifiers::f1_score(randomforest_pred, randomforest_test$issue)  %>% as.data.frame() %>% mutate(class = rownames(.)))  %>% mutate(country = country)
+    # 
+    #  tm_eval <- merge(model_eval, add_param, by = "country") %>% rbind.fill(tm_eval)
+    # 
+    # }
+    # 
+    #   ## with alternative DFM
+    #   model_id <- model_id + 1
+    #   print(model_id)
+    # 
+    #   eval_start <- Sys.time()
+    #    if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) {
+    #      randomforest_eval_alt <-  randomForest(x = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))), y = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))$issue),
+    #                    xtest = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue),
+    #                    importance = T, mtry = 20, ntree = 100,
+    #                    keep.forest = T, type = "class")
+    #     eval_end <- Sys.time()
+    # 
+    # randomforest_pred_alt <- predict(randomforest_eval_alt, newdata = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class")
+    # randomforest_test_alt <- dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)
+    # 
+    #   model_eval <- data.frame(accuracy = accuracy(randomforest_pred_alt, randomforest_test_alt$issue),
+    #            time = as.numeric(eval_end - eval_start),
+    #            seed = seed,
+    #            weight = "tfidf",
+    #            model_name = model_name,
+    #            model_id = model_id,
+    #            alpha = .5,
+    #            distribution = "multinomial",
+    #            country = country)
+    # 
+    #     add_param <- cbind(quanteda.classifiers::precision(randomforest_pred_alt, randomforest_test_alt$issue) %>% as.data.frame(),
+    #                        quanteda.classifiers::recall(randomforest_pred_alt, randomforest_test_alt$issue) %>% as.data.frame(),
+    #                        quanteda.classifiers::f1_score(randomforest_pred_alt, randomforest_test_alt$issue)  %>% as.data.frame() %>% mutate(class = rownames(.)))  %>% mutate(country = country)
+    # 
+    #  tm_eval <- merge(model_eval, add_param, by = "country") %>% rbind.fill(tm_eval)
+    # 
+    # }
+
+
 }
+
+# if(!dir.exists("files/supervised")) dir.create("files/supervised")
+
+save(tm_eval, file = "files/tm_eval.RData")
+
+
 ```
 
-## Ridge regression (L2)
 
-```{r tm-ridge}
-# Five-fold cross-validation for every possible parameter combination
-filename <- "supervised-files/textmodels/ridge_eval.RData"
-if(file.exists(filename)) load(filename) else {
-  ridge_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), 
-      parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = c(0, 7)))
-  
-  # Add alternative dfm (with bigrams and max_docfreq 20%)
-  ridge_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = c(0, 7))) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(ridge_eval)
-  
-    ridge_eval$model <- "Ridge (L2)"
-    save(ridge_eval, file = filename)
-}
-```
-
-## Lasso regression (L1)
-
-We estimate the L1-regularized logistic regression for our classification task.
-
-```{r tm-lasso}
-# Five-fold cross-validation for every possible parameter combination
-filename <- "supervised-files/textmodels/lasso_eval.RData"
-if(file.exists(filename)) load(filename) else {
-  lasso_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 6))
-  
-    # Add alternative dfm (with bigrams and max_docfreq 20%)
-  lasso_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 6)) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(lasso_eval)
-  
-  lasso_eval$model <- "Lasso (L1)"
-  save(lasso_eval, file = filename)
-}
-```
-
-## Elastic Net
-
-The elastic net method combines the L1 and L2 penalties of the lasso and ridge methods (above).
-
-```{r tm-elasticnet}
-# Register multicore backend 
-registerDoMC(cores = 4) 
-
-# Estimate model
-filename <- "supervised-files/textmodels/elasticnet_mod.RData"
-if(file.exists(filename)) load(filename) else {
-  eval_start <- Sys.time()
-  elasticnet_mod <- glmnet(x = dfm_subset(dfmat, dfmat$cv_sample != 1), y = dfm_subset(dfmat, dfmat$cv_sample != 1)$issue,
-                   family = "multinomial", alpha = 0.5,
-                   type.measure = "class", standardize = T)
-  elasticnet_mod$time <- as.numeric(Sys.time() - eval_start)
-  elasticnet_mod$seed <- seed
-  elasticnet_mod$weight <- "uniform"
-  elasticnet_mod$model <- "Elastic net"
-save(elasticnet_mod, file = filename)
-}
-
-filename <- "supervised-files/textmodels/elasticnet_pred.RData"
-if(file.exists(filename)) load(filename) else {
-# Get lambda with best accuracy
-elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class")
-acc_list <- apply(elasticnet_pred, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
-elasticnet_pred <- predict(elasticnet_mod, newx = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class", s = elasticnet_mod$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
-
-save(elasticnet_pred, file = filename)
-}
-
-# Save accuracy to compare to alternative dfm
-(benchmark_acc <- accuracy(elasticnet_pred, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
-
-# Estimate alternative model (bigrams and tfidf)
-filename <- "supervised-files/textmodels/elasticnet_mod_alt.RData"
-if(file.exists(filename)) load(filename) else {
-  eval_start <- Sys.time()
-  elasticnet_mod_alt <- glmnet(x = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1), y = dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue,
-                   family = "multinomial", alpha = 0.5,
-                   type.measure = "class", standardize = T)
-    elasticnet_mod_alt$time <- as.numeric(Sys.time() - eval_start)
-    elasticnet_mod_alt$seed <- seed
-    elasticnet_mod_alt$weight <- "tfidf"
-    elasticnet_mod_alt$model <- "Elastic net"
-  save(elasticnet_mod_alt, file = filename)
-}
-  
-# Get lambda with best accuracy
-elasticnet_pred_alt <- predict(elasticnet_mod_alt, newx = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class")
-acc_list <- apply(elasticnet_pred_alt, MARGIN = 2, FUN = function (x)  accuracy(x, dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue))
-elasticnet_pred_alt <- predict(elasticnet_mod_alt, newx = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class", s = elasticnet_mod_alt$lambda[which(unlist(acc_list) == max(acc_list %>% unlist))][1])
-
-filename <- "supervised-files/textmodels/elasticnet_pred_alt.RData"
-save(elasticnet_pred_alt, file = filename)
-
-# Which model is better?
-print("Optimal weight:")
-if(accuracy(elasticnet_pred_alt,  dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue) %>% as.numeric() > benchmark_acc %>% as.numeric()) {
-  print(elasticnet_mod_alt$weight)
-  elasticnet_opt_alt <- T
-} else {
-  print(elasticnet_mod$weight)
-  elasticnet_opt_alt <- F
-}
-
-filename <- "supervised-files/textmodels/elasticnet_opt_alt.RData"
-save(elasticnet_opt_alt, file = filename)
-```
-
-## SVM
-
-We estimate support vector classification (Crammer and Singer 2001) for our classification task.
-
-(Crammer, K. & Singer, Y. (2001). On the Algorithmic Implementation of Multiclass Kernel-based Vector Machines. Journal of Machine Learning Research, 2. 265-292.)
-
-```{r tm-svm}
-# Five-fold cross-validation for every possible parameter combination
-filename <- "supervised-files/textmodels/svm_eval.RData"
-if(file.exists(filename)) load(filename) else {
-  svm_eval <- textmodel_evaluate(dfmat, dfmat$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(weight = c("uniform", "docfreq", "termfreq"), type = 4))
-  
-    # Add alternative dfm (with bigrams and max_docfreq 20%)
-  svm_eval <-  textmodel_evaluate(dfmat_alt, dfmat_alt$issue, k = folds_cv, seed = seed, model = "textmodel_svm", fun = c("accuracy", "precision", "recall", "f1_score"), parameters = list(type = 4)) %>% dplyr::mutate(weight = "tfidf") %>% rbind.fill(svm_eval)
-  
-  svm_eval$model <- "SVM" 
-  save(svm_eval, file =  filename)
-}
-```
-
-## Random Forest
-
-We estimate a model using the random forest algorithm for classification. We forgo cross-validation because OOB avoids over-classification.
-
-(Breiman, L. (2001), Random Forests, Machine Learning 45(1), 5-32.)
-
-```{r tm-randomforest}
-# Estimate model (100 trees)
-filename <- "supervised-files/textmodels/randomforest_eval.RData"
-if(file.exists(filename)) load(filename) else {
-  eval_start <- Sys.time()
-  randomforest_eval <-  randomForest(x = as.matrix(dfm_subset(dfmat, dfmat$cv_sample != 1)), y = as.factor(dfm_subset(dfmat, dfmat$cv_sample != 1)$issue),
-                   xtest = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat, dfmat$cv_sample == 1)$issue),
-                   importance = T, mtry = 20, ntree = 100,
-                   keep.forest = T, type = "class")
-  randomforest_eval$time <- as.numeric(Sys.time() - eval_start)
-  randomforest_eval$seed <- seed
-  randomforest_eval$model <- "Random forest"
-  randomforest_eval$weight <- "uniform"
-  save(randomforest_eval, file = filename)
-}
-
-randomforest_pred <- predict(randomforest_eval, newdata = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class")
-
-filename <- "supervised-files/textmodels/randomforest_pred.RData"
-save(randomforest_pred, file = filename)
-
-# Save accuracy to compare to alternative dfm
-(benchmark_acc <- accuracy(randomforest_pred, dfm_subset(dfmat, dfmat$cv_sample == 1)$issue))
-
-# Estimate alternative model (bigrams and tfidf)
-filename <- "supervised-files/textmodels/randomforest_eval_alt.RData"
-if(file.exists(filename)) load(filename) else {
-  eval_start <- Sys.time()
-  randomforest_eval_alt <-  randomForest(x = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)), y = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue),
-                   xtest = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue),
-                   importance = T, mtry = 20, ntree = 100,
-                   keep.forest = T, type = "class")
-  randomforest_eval_alt$time <- as.numeric(Sys.time() - eval_start)
-  randomforest_eval_alt$seed <- seed
-  randomforest_eval_alt$model <- "Random forest"
-  randomforest_eval_alt$weight <- "tfidf"
-  save(randomforest_eval_alt, file = filename)
-}
-
-randomforest_pred_alt <- predict(randomforest_eval_alt, newdata = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class")
-
-filename <- "supervised-files/textmodels/randomforest_pred_alt.RData"
-save(randomforest_pred_alt, file = filename)
-
-
-# Which model is better?
-print("Optimal weight:")
-if(accuracy(randomforest_pred_alt,  dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue) %>% as.numeric() > benchmark_acc %>% as.numeric()) {
-  print(randomforest_eval_alt$weight)
-  randomforest_opt_alt <- T
-} else {
-  print(randomforest_eval$weight)
-  randomforest_opt_alt <- F
-}
-
-filename <- "supervised-files/textmodels/randomforest_opt_alt.RData"
-save(randomforest_opt_alt, file = filename)
-```
-
-
-# Ensemble methods: SuperLearner
-
-The SuperLearner is run in Google Colab (Python).
-
-See: https://colab.research.google.com/drive/1vUF7fGXenLG1kXqWsWnSTrwAHSmnaGUG?usp=sharing
-
-Maximum accuracy: 
-
-# Semi-supervised models
-
-The semi-supervised models are run in Google Colab (Python).
-
-See: https://colab.research.google.com/drive/1JR6pVtnIwVK4AMu-IN4UN43ABWflCUUO?usp=sharing
-
-Maximum accuracy: 
 
 ```{r script_eval}
 # Time needed to run script (much shorter when textmodels are just loaded from file)

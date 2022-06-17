@@ -33,11 +33,13 @@ proc_pretrained_vec <- function(p_vec) {
 ###########
 
 # Function for plotting parties' issue attention over time
-plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
+plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F, country = NULL) {
   if(is.null(data)) break
+  if(!is.null(country)) plot_data <- filter(plot_data, country == country)
   
   if(is.null(plot_party)) plot_party <- unique(plot_data[, "party"])
   if(is.null(plot_issue)) plot_party <- unique(plot_data[, "issue"])
+  
   
   methodname <- deparse(substitute(plot_data)) %>% str_extract("(supervised_lag)|(readme_lag)|(supervised)|(readme)") %>% str_replace("_", "-")
   
@@ -124,6 +126,9 @@ plot_issue_agenda <- function(plot_data, plot_issue, plot_party, facet = F) {
   if(facet) thisplot <- thisplot + facet_wrap(~ party)
   
   thisplot
+  
+  if(!is.null(country)) filename <- str_c(filename, "-", country)
+  
     ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
     ggsave(str_c("plots/", filename, ".png"), width = 5*2^.5, height = 5)
   

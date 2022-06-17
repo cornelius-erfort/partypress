@@ -44,9 +44,9 @@ loadfonts()
 loadfonts(device = "pdf")
 theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
 
-if(!dir.exists("supervised-files")) dir.create("supervised-files")
-
 source("scripts/functions.R")
+
+load("files/press.RData")
 
 ```
 
@@ -56,62 +56,77 @@ source("scripts/functions.R")
 
 We trained the models using a set of 2,612 labeled documents. In order to obtain aggregated measures of issue attention, we predict the issue categories of all ? labeled and unlabeled press releases in our sample.
 
+```{r ridge-predict}
+
+presscorpus <- corpus(str_c(press$header, " ", press$text),
+                       docvars = select(press, c(country, id, issue, party_name, cv_sample)))
+
+if(!file.exists("files/ridge_pred_all.RData")) {
+  ridge_pred_all <- data.frame()
+for (country in press$country %>% unique) {
+  print(country)
+  
+  # if(country %in% unique(ridge_pred_all$country)) next
+  
+  countrycorpus <-  presscorpus[presscorpus$country == country, ]
+  ndoc(countrycorpus) %>% print
+  
+  # Stopwords
+  if(country == "poland") countrystop <-  stopwords::stopwords("pl", source = "stopwords-iso") else countrystop <- stopwords(str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl", "ireland" = "en", "uk" = "en", "sweden" = "sw", "denmark" = "da")))
+  countrystop
+  
+  # Create alternative dfm (bigrams and tfidf)
+  dfmat_alt <- countrycorpus[countrycorpus$cv_sample != -1, ] %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
+             docfreq_ = "prop") %>%
+    dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
+             docfreq_ = "count") %>% suppressWarnings()
+  
+  dfm_all <- countrycorpus %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_match(dfmat_alt@Dimnames$features)
+
+    ridge_pred_all <- data.frame(country = country,
+                             id = dfm_all$id,
+                             prediction = textmodel_svm(dfm_subset(dfm_all, dfm_all$cv_sample != -1), dfm_subset(dfm_all, dfm_all$cv_sample != -1)$issue, type = 7) %>%
+        predict(., newdata = dfm_all)) %>% rbind.fill(ridge_pred_all)
+    # save(ridge_pred_all, file = "files/ridge_pred_all.RData")
+} else load("files/ridge_pred_all.RData")
+
+    
+}
+```
+
 
 ```{r unlabeled}
+
 # Load the predicted labels
-alldocs <- read_csv("transfer-files/alldocs-pred.csv", col_names = F)
-names(alldocs) <- c("label",  "id")
+multi_pred_all <- read_csv("files/multilingual-all_predictions.csv", col_names = F)
+names(multi_pred_all) <- c("label", "id", "country")
+multi_pred_all <- merge(multi_pred_all, data.frame(multi = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label", all.x = T) %>% select(-c(label))
+press <- merge(press, multi_pred_all, by = c("country", "id"))
 
-# Translate labels back into CAP issues
-labels <- read_csv("transfer-files/bert-pred.csv", col_names = F)[, 2:3] %>% unique
-names(labels) <- c("issue", "label")
-labels$issue[labels$issue == 191] <- 19.1
-labels$issue[labels$issue == 192] <- 19.2
-labels$issue <- factor(labels$issue, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-alldocs <- merge(alldocs, labels, by = "label") %>% select(-c(label))
 
-# Load and merge unlabeled data
-load("data/all/germany.RData")
-nrow(germany)
-alldocs <- merge(germany, alldocs, by = "id")
-nrow(germany)
+ridge_pred_all <- dplyr::rename(ridge_pred_all, ridge = prediction)
+press <- merge(press, ridge_pred_all, by = c("country", "id"))
 
-# Table of predicted issues 
-table(alldocs$issue) %>% as.data.frame() %>% 
-  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
-  kable_styling(latex_options = "scale_down")
-
-table(alldocs$issue) / nrow(alldocs)
-
-# Clean party names
-party_names <- data.frame(party = c("90gruene_fraktion",
-                                    "afd_bundesverband", "afd_fraktion",
-                                    "fdp_bundesverband", "fdp_fraktion", "linke_fraktion",
-                                    "spd_fraktion", "union_fraktion"),
-                          party_name = c("B'90/Die Grünen", 
-                                         "AfD", "AfD", 
-                                         "FDP", "FDP", "DIE LINKE", 
-                                         "SPD", "CDU/CSU"))
-alldocs <- merge(alldocs, party_names, by = "party")
-nrow(alldocs)
-
+press <- filter(press, party_name != "Kukiz'15 (2015-2019)")
+press$party_name %>% table
 
 # Tables for samples of press releases
-# Environment
-sample7 <- select(alldocs, c("party_name", "date", "header", "issue")) %>% filter(issue == 7)
-(sample7 <- sample7[sample(1:nrow(sample7), 10), ])
-
-latex_out <- capture.output(sample7 %>% dplyr::rename(party = party_name, title = header) %>%
-  stargazer(type = "latex", summary = F, rownames = F, 
-            title = "Sample of press releases classified as category 7 - Environment", label = "tab:7-document-samples"))
-
-latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{stX") %>% cat(sep = "\n"), file = "tables/7-document-samples.tex")
-
 # Immigration
-sample9 <- select(alldocs, c("party_name", "date", "header", "issue")) %>% filter(issue == 9)
-(sample9 <- sample9[sample(1:nrow(sample9), 10), ])
+sample9 <- select(press, c("country", "party_name", "date", "header", "multi")) %>% filter(multi == 9)
+(sample9 <- sample9[sample(1:nrow(sample9), 20), ])
 
-latex_out <- capture.output(sample9 %>% dplyr::rename(party = party_name, title = header) %>%
+sample9 %>% dplyr::rename(party = party_name, title = header) %>% select(-c(multi))
+
+
+latex_out <- capture.output(sample9 %>% dplyr::rename(party = party_name, title = header) %>% select(-c(multi)) %>%
   stargazer(type = "latex", summary = F, rownames = F, 
             title = "Sample of press releases classified as category 9 - Immigration", label = "tab:9-document-samples"))
 
@@ -126,7 +141,7 @@ To measure parties' evolving issue agendas, we aggregate the category counts ove
 ```{r aggregation}
 
 # Create dataframe with only necessary vars
-issue_agendas <- alldocs %>% select(c(date, issue, party_name)) %>% dplyr::rename(party = party_name)
+issue_agendas <- press %>% select(c(country, date, multi, party_name)) %>% dplyr::rename(party = party_name) %>% dplyr::rename(issue = multi)
 
 # Make date quarterly
 issue_agendas$date <- as.character(issue_agendas$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
@@ -135,7 +150,7 @@ issue_agendas$date <- as.character(issue_agendas$date) %>% substr(1, 8) %>% str_
 issue_agendas$freq <- 1
 
 # Aggregate by party, date and issue
-issue_agendas <- aggregate(freq ~ party + date + issue, issue_agendas, sum)
+issue_agendas <- aggregate(freq ~ country + party + date + issue, issue_agendas, sum)
 
 # Add observations with zero documents
 for (thisparty in unique(issue_agendas$party)) {
@@ -152,7 +167,10 @@ issue_agendas$party_sum <- ave(issue_agendas$freq, issue_agendas$date, issue_age
 
 issue_agendas$attention <- issue_agendas$freq / issue_agendas$party_sum
 
+issue_agendas$issue %>% table
+
 # Add issue descriptions
+
 issue_categories <- 
   data.frame(issue = c(1:10, 12:18, 191:192, 20, 23, 98, 99), 
              issue_descr = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", 
@@ -171,50 +189,48 @@ save(issue_agendas, file = "data/issue_agendas.RData")
 
 # Visualize issue agendas
 
-```{r viz}
-if(!dir.exists("plots")) dir.create("plots")
+```{r}
 
-## Facet (all parties separate)
 # Environment and Energy
-plot_issue_agenda(issue_agendas, 7,  unique(issue_agendas$party), T) 
-# Immigration
-plot_issue_agenda(issue_agendas, 9,  unique(issue_agendas$party), T) 
+for (this_country in unique(issue_agendas$country) %>% sort) {
 
-
-# All parties in one plot
-plot_issue_agenda(issue_agendas, unique(issue_agendas$party), T)
-
-
-
-# Show spike in attention to immigration
-spec_att <- issue_agendas %>% filter(issue %in% c(7, 9)) # & party != "AfD")
-spec_att$time <- ""
-spec_att$time[spec_att$date >= ymd("2015-01-01") & spec_att$date <= ymd("2015-12-31") & spec_att$issue == 9] <- "2015" 
-spec_att$time[spec_att$date >= ymd("2014-01-01") & spec_att$date <= ymd("2014-12-31") & spec_att$issue == 9] <- "2014"
-spec_att$time[spec_att$date >= ymd("2018-01-01") & spec_att$date <= ymd("2018-12-31") & spec_att$issue == 7] <- "2018" 
-spec_att$time[spec_att$date >= ymd("2017-01-01") & spec_att$date <= ymd("2017-12-31") & spec_att$issue == 7] <- "2017" 
-# spec_att$time[spec_att$date >= ymd("2011-01-01") & spec_att$date <= ymd("2011-12-31") & spec_att$issue == 7] <- "2011" 
-spec_att <- filter(spec_att, time != "")  %>% aggregate(attention ~ party + time + issue, ., mean)
-spec_att$issue[spec_att$issue == 7] <- "7 - Environment"
-spec_att$issue[spec_att$issue == "9"] <- "9 - Immigration"
-filename <- "all-parties_facet_supervised-change"
-# setwd("/Users/cornelius/Desktop/SCRIPTS/GitHub/scripts-issue-agendas/")
-ggplot(spec_att, aes(x = time, y = attention)) +
-  theme(text = element_text(size = 14)) +
-  ylab("Share of press releases per year") +
-  geom_point(aes(color = party, shape = party)) +
-  geom_line(aes(group = party, color = party), lty = 2, alpha = .5) +
-  geom_text_repel(data = spec_att[spec_att$time %in% c("2017", "2014"), ], aes(x = spec_att[spec_att$time %in% c("2017", "2014"), "time"], y = spec_att[spec_att$time %in% c("2017", "2014"), "attention"]), label = round(spec_att[spec_att$time %in% c("2017", "2014"), "attention"], 2), hjust = "left", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25,  min.segment.length = .1, point.padding = .5, max.overlaps = 100, nudge_x = -.25) +
-  geom_text_repel(data = spec_att[!(spec_att$time %in% c("2017", "2014")), ], aes(x = spec_att[!(spec_att$time %in% c("2017", "2014")), "time"], y = spec_att[!(spec_att$time %in% c("2017", "2014")), "attention"]), label = round(spec_att[!(spec_att$time %in% c("2017", "2014")), "attention"], 2), hjust = "right", colour = "dark grey", family = "LM Roman 10", box.padding = .4, size = 4, segment.size = .25, min.segment.length = .1, point.padding = .5, max.overlaps = 100, nudge_x = .25) +
-  scale_color_manual(values = c("blue", "green", "black", "purple", "yellow", "red")) + #"blue", 
-  facet_grid(~ issue, scales = "free_x")
+  plot_data <- filter(issue_agendas, country == this_country & issue == 9)
   
+  plot_data <- filter(plot_data, party_sum > 5)
   
-  ggsave(str_c("plots/", filename, ".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          text = element_text(size = 16)) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
+) +
+    ylab("Share of press releases per quarter")
   
-  ggsave(str_c("plots/", filename, ".png"), width = 5*2^.5, height = 5)
+  thisplot <- thisplot +
+        geom_step(color = "dark grey", alpha = .8) +
+        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
+        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .7,
+                linetype ="dashed",
+                alpha = 0.8, color = "black",
+                se = F)
+  
+  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
+  
+
+    thisplot <- thisplot +
+      geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
+  
+  thisplot <- thisplot + facet_wrap(~ party)
+  
+  thisplot
+  
+    ggsave(str_c("plots/immigration-agenda-", this_country,".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
+}
 
 ```
+
+
 
 
 

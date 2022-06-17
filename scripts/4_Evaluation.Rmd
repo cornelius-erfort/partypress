@@ -14,23 +14,7 @@ knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, pyt
 knitr::opts_knit$set(root.dir = dirname(getwd()))
 ```
 
-# Summary
 
-We obtain the highest accuracy of 77.1% using the pretrained Transformers model GBERT fine-tuned with our labeled dataset. It requires ~8 minutes of computing time using 4 training epochs (remote, Colab Pro).
-
-The Superlearner ensemble of single supervised classifiers obtains 71.2% accuracy (w/o cross-validation!), using the tfidf-transformed dfm. It requires ~18 minutes (w/o cross-validation!) of computing time (remote, Colab Pro).
-
-The best performing single classifier (after five-fold cross-validation) is Ridge (L2) with an accuracy of 68.1%, using the tfidf-transformed dfm. It requires ~9 seconds of computing time (locally).
-
-Our supervised text classification works better for some issue areas and worse for others.
-
-The size of the training dataset affects the accuracy of our model. Our analysis suggests that an enlargement of our training dataset would only lead to marginal performance improvements. On the contrary, the Transformers model already yields an accuracy of over 70% with only about 750 coded press releases.
-
-<!-- The MSE for predicted proportions (i.e. share of press releases concerning each issue) is 1.33%. -->
-
-# Setting up
-
-This script requires the files which are not included on GitHub.
 
 ## Loading packages
 
@@ -58,550 +42,407 @@ if(!dir.exists("supervised-files")) dir.create("supervised-files")
 
 source("scripts/functions.R")
 
-```
-
-## Loading document frequency matrix (dfm)
-
-See other script for the generation of the dfm.
-
-```{r dfm}
-load("supervised-files/data/dfmat.RData")
-load("supervised-files/data/dfmat_alt.RData")
-
-# Category descriptions
-issue_categories <- 
-  data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 191:192), 
-             issue_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", 
-                                "Immigration", "Transportation", "Law and Crime", "Social Welfare",
-                             "Housing", "Domestic Commerce", "Defense", "Technology", 
-                             "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
-
-
-# Distribution with merged categories
-table(dfmat$issue) %>% as.data.frame() %>% 
-  dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
-  kable_styling(latex_options = "scale_down")
+load("files/press.RData")
 
 ```
 
 
-# Textmodels
 
-Following Barberá et al. (2021) we estimated the following models:
+# Add SuperLearner models
 
-1. Naive Bayes (multinomial)
-2. Ridge regression (L2)
-3. Lasso regression (L1)
-4. Elastic Net
-5. SVM
-6. Random Forest
+```{r transformer}
+load("files/tm_eval.RData")
 
-(Barberá, P., Boydstun, A., Linn, S., McMahon, R., & Nagler, J. (2021). Automated Text Classification of News Articles: A Practical Guide. Political Analysis, 29(1), 19-42. doi:10.1017/pan.2020.8)
+super_pred <- read_csv("files/superlearner-prediction.csv", col_names = c("country", "cv_sample", "weight", "issue", "prediction"))
 
-Additionally, we run the following models:
+super_eval <- super_pred %>% dplyr::group_by(country, cv_sample, weight) %>% dplyr::summarise(precision = quanteda.classifiers::precision(prediction, issue, by_class = T)) %>%  unnest_wider(precision) %>% pivot_longer(cols = unique(super_pred$issue) %>% as.character(), names_to = "issue", values_to = "precision")  %>% 
+  merge(super_pred %>% dplyr::group_by(country, cv_sample, weight) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = T)), by = c("country", "cv_sample", "weight"))
+                                                                                
+super_eval <- super_pred %>% dplyr::group_by(country, cv_sample, weight) %>% dplyr::summarise(recall = quanteda.classifiers::recall(prediction, issue, by_class = T)) %>%  unnest_wider(recall) %>% pivot_longer(cols = unique(super_pred$issue) %>% as.character(), names_to = "issue", values_to = "recall")  %>% merge(super_eval, by = c("country", "cv_sample", "issue", "weight"))
 
-7. Superlearner (ensemble of single classifiers)
-8. Semi-supervised (Elastic net)
-9. Transformers model (BERT)
-
-Finally, we also test the performance of Readme2 for the estimation of proportions. (An evaluation of the classification of individual documents is not possible for this method.)
-
-The individual models are run in previous scripts.
-
-An overview of the results for each classifier can be found in this script.
-
-# Aggregating the results of the classifiers
-
-```{r eval-aggr}
-# Create a dataframe for all textmodels and save first row
-tm_eval <- data.frame()
-
-# 1 Naive bayes
-load("supervised-files/textmodels/naivebayes_eval.RData")
-(naivebayes_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + distribution + smooth + model, naivebayes_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
-naivebayes_eval_aggr$time <- naivebayes_eval_aggr$time / 60
-tm_eval <- naivebayes_eval_aggr %>% rbind.fill(tm_eval)
-
-# 2 Ridge regression (L2)
-load("supervised-files/textmodels/ridge_eval.RData")
-(ridge_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + type + model, ridge_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:5, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
-ridge_eval_aggr$time <- ridge_eval_aggr$time / 60
-tm_eval <- ridge_eval_aggr %>% rbind.fill(tm_eval)
-
-# 3 Lasso regression (L1)
-load("supervised-files/textmodels/lasso_eval.RData")
-(lasso_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + model, lasso_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:2, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
-lasso_eval_aggr$time <- lasso_eval_aggr$time / 60
-tm_eval <- lasso_eval_aggr %>% rbind.fill(tm_eval)
-
-# 4 Elastic net
-load("supervised-files/textmodels/elasticnet_opt_alt.RData")
-load("supervised-files/textmodels/elasticnet_mod.RData")
-load("supervised-files/textmodels/elasticnet_pred.RData")
-elastic_net_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
-
-# If alternative model is better:
-if(elasticnet_opt_alt) {
-  load("supervised-files/textmodels/elasticnet_mod_alt.RData")
-  elasticnet_mod <- elasticnet_mod_alt
-  load("supervised-files/textmodels/elasticnet_pred_alt.RData")
-  elasticnet_pred <- elasticnet_pred_alt
-  elastic_net_test <- dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)
-}
+super_eval <- super_pred %>% dplyr::group_by(country, cv_sample, weight) %>% dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, issue, by_class = T)) %>%  unnest_wider(f1) %>% pivot_longer(cols = unique(super_pred$issue) %>% as.character(), names_to = "issue", values_to = "f1")  %>% merge(super_eval, by = c("country", "cv_sample", "issue", "weight"))
 
 
-tm_eval <- data.frame(accuracy = accuracy(elasticnet_pred, elastic_net_test$issue), 
-           precision = precision(elasticnet_pred, elastic_net_test$issue) %>% unlist() %>% mean(),
-           recall = recall(elasticnet_pred, elastic_net_test$issue) %>% unlist() %>% mean(),
-           f1_score = f1_score(elasticnet_pred, elastic_net_test$issue) %>% unlist() %>% mean(),
-           time = elasticnet_mod$time,
-           seed = elasticnet_mod$seed,
-           weight = elasticnet_mod$weight,
-           model = elasticnet_mod$model,
-           alpha = .5,
-           distribution = "multinomial") %>% 
-  rbind.fill(tm_eval)
+super_times <- read_csv("files/superlearner-times.csv", col_names = c("time", "cv_sample", "weight", "country"))
+super_times$time <- super_times$time/60
 
-# 5 SVM
-load("supervised-files/textmodels/svm_eval.RData")
-(svm_eval_aggr <- aggregate(cbind(accuracy, precision, recall, f1_score, time, seed) ~ weight + model, svm_eval[, -c(1)], mean) %>% arrange(desc(accuracy)))[1:3, ] %>% mutate_at(vars(accuracy, precision, recall, f1_score), function (x) round(x, 3)) %>% kbl(booktabs = T)
-svm_eval_aggr$time <- svm_eval_aggr$time / 60
-tm_eval <- svm_eval_aggr %>% rbind.fill(tm_eval)
+super_eval <- merge(super_eval, super_times, by = c("country", "cv_sample", "weight"))
 
-# 6 Random Forest
-load("supervised-files/textmodels/randomforest_opt_alt.RData")
-load("supervised-files/textmodels/randomforest_eval.RData")
-load("supervised-files/textmodels/randomforest_pred.RData")
-randomforest_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
+super_eval$model_name <- "SuperLearner"
+super_eval$model_id[super_eval$weight == "uniform"] <- 11
+super_eval$model_id[super_eval$weight == "tfidf"] <- 12
 
-# If alternative model is better:
-if(randomforest_opt_alt) {
-  load("supervised-files/textmodels/randomforest_eval_alt.RData")
-  randomforest_mod <- randomforest_eval_alt
-  load("supervised-files/textmodels/randomforest_pred_alt.RData")
-  randomforest_pred <- randomforest_pred_alt
-  randomforest_test <- dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)
-}
+super_eval
+super_eval <- super_eval %>% dplyr::rename("k" = "cv_sample", "class" = "issue")
 
-tm_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$issue), 
-           precision = precision(randomforest_pred, randomforest_test$issue) %>% unlist() %>% mean(na.rm = T),
-           recall = recall(randomforest_pred, randomforest_test$issue) %>% unlist() %>% mean(na.rm = T),
-           f1_score = f1_score(randomforest_pred, randomforest_test$issue) %>% unlist() %>% mean(na.rm = T),
-           time = randomforest_eval$time, seed = randomforest_eval$seed, model = randomforest_eval$model,
-           weight = randomforest_eval$weight,
-           alpha = .5, distribution = "multinomial") %>% 
-  rbind.fill(tm_eval)
-
-# 7 SuperLearner
-# Load superlearner prediction and add row to evaluation table
-super_pred <- read_csv("superlearner-files/super-pred.csv", col_names = F)
-names(super_pred) <- c("prediction", "issue", "cv_sample")
-supertime <- read_csv("superlearner-files/cv-time.txt", col_names = F, col_types = "n")[1,1] %>% as.numeric()
-superlearner_test <- dfm_subset(dfmat_alt, dfmat$cv_sample == 1)$issue
-
-tm_eval <- data.frame(accuracy = accuracy(super_pred$prediction, super_pred$issue),
-           precision = precision(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
-           recall = recall(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
-           f1_score = f1_score(super_pred$prediction, super_pred$issue) %>% unlist() %>% mean(),
-           time = supertime,
-           weight = "tfidf",
-           seed = 1621447882,
-           model = "SuperLearner ensemble") %>%
-  rbind.fill(tm_eval)
+tm_eval <- rbind.fill(tm_eval, super_eval)
 
 
-# 8 Semi-supervised
-# Load Semi-supervised prediction and add row to evaluation table
-semi_pred <- read_csv("semi-files/semi-pred.csv", col_names = F)
-names(semi_pred) <- c("prediction",  "issue",  "cv_sample")
-semitime <- read_csv("semi-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
-
-tm_eval <- data.frame(accuracy = accuracy(semi_pred$prediction, semi_pred$issue),
-           precision = precision(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
-           recall = recall(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
-           f1_score = f1_score(semi_pred$prediction, semi_pred$issue) %>% unlist() %>% mean(),
-           time = semitime,
-           weight = "tfidf",
-           seed = 1621447882,
-           model = "Semi-supervised") %>%
-  rbind.fill(tm_eval)
-
-
-# 9 Transformers
-# Load transfer models prediction and add row to evaluation table
-transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
-names(transfer_pred) <- c("prediction",  "issue", "label",  "cv_sample")
-transfertime <- read_csv("transfer-files/cv-time.txt", col_names = F, col_types = "n") %>% as.numeric() / 60
-
-tm_eval <- data.frame(accuracy = accuracy(transfer_pred$prediction, transfer_pred$label),
-           precision = precision(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-           recall = recall(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-           f1_score = f1_score(transfer_pred$prediction, transfer_pred$label) %>% unlist() %>% mean(),
-           time = transfertime,
-           seed = 1621447882,
-           model = "GBERT (Transformers)") %>%
-  rbind.fill(tm_eval)
-
-# Add var for instance type
-tm_eval <- mutate(tm_eval, instance = ifelse(str_detect(model, "(GBER)|(Super)|(Semi)"), "remote", "local"))
 
 ```
 
 
-```{r dfm-eval}
-aggregate(accuracy ~ weight, tm_eval, mean) # tfidf gives overall best performance
+# Add Transformer models (mono- and multilingual)
+
+```{r transformer}
+# load("files/tm_eval.RData")
+# tm_eval <- filter(tm_eval, model_id < 11)
+
+# Monolingual
+mono_pred <- read_csv("files/monolingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id"))
+
+mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(precision = quanteda.classifiers::precision(prediction, label, by_class = T)) %>%  unnest_wider(precision) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "precision")  %>% 
+  merge(mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, label, by_class = T)), by = c("country", "cv_sample"))
+                                                                                
+mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(recall = quanteda.classifiers::recall(prediction, label, by_class = T)) %>%  unnest_wider(recall) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "recall")  %>% merge(mono_eval, by = c("country", "cv_sample", "label"))
+
+mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, label, by_class = T)) %>%  unnest_wider(f1) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "f1")  %>% merge(mono_eval, by = c("country", "cv_sample", "label"))
+
+mono_eval <- merge(mono_eval, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label))
+
+mono_times <- read_csv("files/monolingual-times.csv", col_names = c("time", "cv_sample", "country"))
+mono_times$time <- mono_times$time/60
+
+mono_eval <- merge(mono_eval, mono_times, by = c("country", "cv_sample"))
+
+mono_eval$model_name <- "Monolingual Transformer"
+mono_eval$model_id <- 13
+
+mono_eval <- mono_eval %>% dplyr::rename("k" = "cv_sample", "class" = "issue")
+
+tm_eval <- rbind.fill(tm_eval, mono_eval)
+
+# Multilingual
+multi_pred <- read_csv("files/multilingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id"))
+
+multi_eval <- multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(precision = quanteda.classifiers::precision(prediction, label, by_class = T)) %>%  unnest_wider(precision) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "precision")  %>%
+  merge(multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, label, by_class = T)), by = c("country", "cv_sample"))
+                                                                                
+multi_eval <- multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(recall = quanteda.classifiers::recall(prediction, label, by_class = T)) %>%  unnest_wider(recall) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "recall")  %>% merge(multi_eval, by = c("country", "cv_sample", "label"))
+
+multi_eval <- multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, label, by_class = T)) %>%  unnest_wider(f1) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "f1")  %>% merge(multi_eval, by = c("country", "cv_sample", "label"))
+
+multi_eval <- merge(multi_eval, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label))
+
+
+multi_times <- read_csv("files/multilingual-times.csv" , col_names = c("time"))/60
+multi_times$cv_sample <- 1:5
+
+multi_eval <- merge(multi_eval, multi_times, by = "cv_sample")
+
+multi_eval$model_name <- "Multilingual Transformer"
+multi_eval$model_id <- 14
+
+multi_eval <- multi_eval %>% dplyr::rename("k" = "cv_sample", "class" = "issue")
+
+
+tm_eval <- rbind.fill(tm_eval, multi_eval)
+
+tm_eval$accuracy <- tm_eval$accuracy %>% unlist()
+
 ```
 
-The tfidf-transformed dfm yields a higher performance for most classifiers and parameter settings.
 
-# Evaluation of textmodels
+# Evaluate text models
+```{r tm-eval}
 
-In this section, we present a table for comparison of our textmodels. We compare the model with the highest accuracy for each classifier.
+table(tm_eval$country, tm_eval$model_id)
+tm_eval$model_id %>% unique %>% sort
 
-```{r  tm-eval}
-# Only keep best model for each classifier
-tm_eval <- tm_eval %>% dplyr::group_by(model) %>% 
-  dplyr::mutate(acc_rank = order(order(accuracy, decreasing=TRUE))) %>% 
-  filter(acc_rank == 1) %>% select(-c(acc_rank))
+tm_eval <- tm_eval %>% mutate(alpha = ifelse(is.na(alpha), "", alpha),
+                              distribution = ifelse(is.na(distribution), "", distribution),
+                              type = ifelse(is.na(type), "", type),
+                              smooth = ifelse(is.na(smooth), "", smooth),
+                              seed = ifelse(is.na(seed), "", seed),
+                              weight = ifelse(is.na(weight), "", weight),)
 
-# Comparison of textmodels
-tm_eval[, c("accuracy", "precision", "recall", "f1_score", "time")] <- apply(tm_eval[, c("accuracy", "precision", "recall", "f1_score", "time")], MARGIN = 2, function (x) round(x, 3))
+tm_eval_mean <- aggregate(cbind(accuracy, time) ~ country + model_name + model_id + weight  + distribution + type + smooth + alpha, tm_eval, function (x) mean(x, na.rm = T))
+tm_eval_mean <- tm_eval_mean[order(tm_eval_mean$country, -tm_eval_mean$accuracy), ]
 
-tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "weight", "accuracy", "precision", "recall", "f1_score", "time")] %>% kbl(booktabs = T, row.names = F)
+# Summary across countries
+tm_eval_out <- tm_eval_mean %>%  mutate(time = ifelse((model_id <= 8) & time > 2, time/60, time),) %>% 
+  group_by(country, model_name, model_id, weight, distribution, type, smooth, alpha) %>% 
+  top_n(1, accuracy) %>% 
+  aggregate(cbind(accuracy, time) ~ model_name + model_id + weight  + distribution + type + smooth + alpha, ., function (x) mean(x, na.rm = T)) %>% 
+  group_by(model_name) %>% 
+  top_n(1, accuracy) %>% mutate(accuracy = round(accuracy*100, 2),
+                                time = round(time, 2)) %>% 
+  select(model_name, accuracy, time) %>% dplyr::rename("Model name" = model_name, "Accuracy (\\%)" = accuracy, "Time (min)" = time)
 
-latex_out <- capture.output(tm_eval[order(tm_eval$accuracy, decreasing = T), c("model", "weight", "accuracy", "precision", "recall", "f1_score", "time")] %>% 
-  dplyr::rename(Model = model, DFM = weight, Accuracy = accuracy, Precision = precision, Recall = recall, "F1 score" = f1_score, "Time (min)" = time) %>%
+latex_out <- capture.output(tm_eval_out %>%
   stargazer(out = "tables/tm-eval.tex", summary = F, rownames = F, 
             title = "Summary of classifier performance", label = "tab:tm-eval"))
 
+# Top 3 per country summary
+tm_eval_out <- tm_eval_mean %>%  mutate(time = ifelse((model_id <= 8) & time > 2, time/60, time),) %>% 
+  group_by(country, model_name) %>% 
+  top_n(1, accuracy) %>% 
+  aggregate(cbind(accuracy, time) ~ country + model_name, ., function (x) mean(x, na.rm = T)) %>% 
+  group_by(country) %>% 
+  top_n(3, accuracy) %>% mutate(accuracy = round(accuracy*100, 2),
+                                time = round(time, 2)) %>% 
+  select(country, model_name, accuracy, time) %>% dplyr::rename(Country = country, "Model name" = model_name, "Accuracy (%)" = accuracy, "Time (min)" = time) %>% 
+  mutate(Country = str_to_title(Country) %>% str_replace("Uk", "UK"))
+
+tm_eval_out <- tm_eval_out[order(tm_eval_out$Country, -tm_eval_out$`Accuracy (%)`), ]
+
+latex_out <- capture.output(tm_eval_out %>%
+  stargazer(out = "tables/tm-eval-country.tex", summary = F, rownames = F, 
+            title = "Best three classifier by country", label = "tab:tm-eval-country"))
+
+
 ```
 
-We obtain the highest accuracy of 77.5% using the pretrained Transformers model GBERT fine-tuned with our labeled dataset. It requires ~8 minutes of computing time (remote, Colab Pro).
-
-The Superlearner ensemble of single supervised classifiers obtains 71.2% accuracy, using the tfidf-transformed dfm. It requires ~18 minutes of computing time (remote, Colab Pro).
-
-The best performing single classifier (after five-fold cross-validation) is Ridge (L2) with an accuracy of 68.1%, using the tfidf-transformed dfm. It requires ~9 seconds of computing time (locally).
-
-The Naive bayes classifier obtains 67.0% accuracy in only 0.23 seconds (locally).
-
-In the following, we therefore use this model to evaluate the performance of the supervised text classification.
 
 
-# Confusion matrix
+```{r tables}
+categories <- data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 19.1, 19.2), 
+             title = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", "Immigration", "Transportation", "Law and Crime", "Social Welfare","Housing", "Domestic Commerce", "Defense", "Technology", "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
 
-Since some issue areas might be more suitable for an supervised classification than others, we analyze the accuracy for individual issues and present a confusion matrix.
+freq <- table(((press %>% filter(cv_sample > 0))$country), ((press %>% filter(cv_sample > 0))$issue)) %>% as.data.frame() %>% dplyr::rename("country" = "Var1", "issue" = "Var2", "n_labeled_issue" = "Freq") %>% mutate(issue = str_replace_all(issue, c("191" = "19.1", "192" = "19.2")) %>% as.numeric) %>% merge((press %>% filter(cv_sample > 0))$country %>% table %>% as.data.frame() %>% dplyr::rename("country" = ".", "n_labeled" = "Freq"), by = "country")
 
-To do so, we rely on the top-performing single classifier, Ridge (L2), as well as the fine-tuned Transformers model.
+tm_eval_issue <- tm_eval %>% mutate(precision = ifelse(is.na(precision), NaN, precision), 
+       recall = ifelse(is.na(recall), NaN, recall), 
+       f1 = ifelse(is.na(f1), NaN, f1), ) %>% 
+  filter(model_name == "Monolingual Transformer") %>% mutate(precision = ifelse(is.nan(precision), -99999, precision),
+                                                             recall = ifelse(is.nan(recall), -99999, recall),
+                                                             f1 = ifelse(is.nan(f1), -99999, f1)) %>% 
+  aggregate(cbind(accuracy, precision, recall, f1) ~ country + class + model_name + type + weight, ., function (x) mean(x, na.rm = T)) %>% 
+  dplyr::rename(issue = class) %>% 
+  mutate(issue = str_replace_all(issue, c("191" = "19.1", "192" = "19.2")) %>% 
+           str_remove("\\.0") %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))) %>% 
+  merge(freq, by = c("country", "issue")) %>% 
+  merge(categories, by = "issue") %>% 
+  mutate(precision = ifelse(precision < 0, NaN, precision),
+                                                             recall = ifelse(recall  < 0, NaN, recall),
+                                                             f1 = ifelse(f1 < 0, NaN, f1)) %>% 
+  select(c(country, issue, title, precision, recall, f1, n_labeled_issue, n_labeled)) %>% 
+  dplyr::rename(Country = country, Issue = issue, Precision = precision, Recall = recall, "F1 score" = f1, Title = title, "n Issue" = n_labeled_issue, "n Country" = n_labeled) %>% 
+  mutate(Precision = round(Precision*100, 2),
+         Recall = round(Recall*100, 2),
+         `F1 score` = round(`F1 score`*100, 2),
+         Country = str_to_title(Country) %>% str_replace("Uk", "UK"))
 
-## Ridge (L2)
+tm_eval_issue <- tm_eval_issue[order(tm_eval_issue$Country, tm_eval_issue$Issue), ] 
+
+table(tm_eval_issue$Issue, tm_eval_issue$Country)
+
+
+
+cross <- filter(press, !is.na(issue) & !is.na(issue_cross)) %>% select("country", "issue", "issue_cross")
+
+cross$issue <- str_replace_all(cross$issue, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+cross$issue_cross <- str_replace_all(cross$issue_cross, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+
+# Performance by category (for each country, for best model)
+for (country in unique(tm_eval_issue$Country)) {
+    latex_out <- capture.output(filter(tm_eval_issue, Country == country) %>% select(-c(Country)) %>% 
+                                  cbind(Intercoder = f1_score(cross$issue[cross$country == tolower(country)], cross$issue_cross[cross$country == tolower(country)])) %>% mutate(f1 = 100*f1) %>%
+                                  dplyr::rename(Intercoder = f1) %>% select(c(Issue, Title, Precision, Recall, "F1 score", Intercoder, "n Issue", "n Country")) %>% 
+                                  stargazer(out = str_c("tables/tm-eval-", country %>% str_to_lower(),".tex"), summary = F, rownames = F,  digits = 1,
+                                            title = str_c("Classifier performance by issue, ", country), label = str_c("tab:tm-eval-", country %>% str_to_lower())))
+}
+
+
+# Performance by model type (for each country)
+# for (country in unique(tm_eval_issue$Country)) {
+#   
+#     latex_out <- capture.output(this_table %>%
+#   stargazer(out = str_c("tables/tm-eval-", country %>% str_to_lower(),".tex"), summary = F, rownames = F, digits = 1,
+#             title = str_c("Summary of classifier performance, ", country), label = str_c("tab:tm-eval-", country %>% str_to_lower())))
+# }
+
+
+# F1 score for each country and category in one table
+
+
+select(tm_eval_issue, c(Country, Issue, Title, "F1 score")) %>% 
+  pivot_wider(names_from = "Country", values_from = "F1 score") %>% 
+  mutate(Issue = str_c(Issue, " - ", Title)) %>% select(-c(Title)) %>% 
+  cbind(
+Average = (select(tm_eval_issue, c(Country, Issue, Title, "F1 score")) %>% 
+  pivot_wider(names_from = "Country", values_from = "F1 score") %>% 
+  mutate(Issue = str_c(Issue, " - ", Title)) %>% select(-c(Title)))[, -c(1)] %>% rowMeans(na.rm = T)) %>% 
+  cbind(Intercoder = f1_score(cross$issue, cross$issue_cross)) %>% mutate(f1 = 100*f1) %>% dplyr::rename(Intercoder = f1) %>% 
+  stargazer(summary = F,rownames = F, 
+            title = "Issue-specific performance: F1 score by country", 
+            label = "f1-country",
+            out = "tables/f1-country.tex", digits = 1)
+
+
+```
+
+
+```{r coverage}
+
+table(press$country)
+
+press$year <- factor(press$year)
+
+for (country in unique(press$country)) table(str_c(press$party_name[press$country == country], " (", press$parlgov_id[press$country == country], ")"), press$year[press$country == country]) %>% unclass %>% stargazer(summary = F, rownames = F, 
+            title = str_c("Number of press releases per party, ", str_to_title(country) %>% str_replace("Uk" ,"UK")), 
+            label = str_c("tab:coverage-", country),
+            out = str_c("tables/coverage-", country, ".tex"))
+
+```
+
 
 ```{r  confusion-ridge}
 # Baseline model (highest cross-validated accuracy)
-ridge_pred <- data.frame()
-for (i in 1:5) {
-  print(i)
-  ridge_pred <- data.frame(
-    prediction = textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i), dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i)$issue, type = 7) %>% predict(., newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)),
-    issue = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)$issue) %>% rbind.fill(ridge_pred)
-}
+if(!file.exists("files/ridge_pred.RData")) {
+  ridge_pred <- data.frame()
 
-# Confusion matrix and overall statistics
-ridge_pred$issue %>% table
+presscorpus <- corpus(str_c(press$header, " ", press$text),
+                       docvars = select(press, c(country, id, issue, party_name, cv_sample)))
 
-truth <- ridge_pred$issue
-truth[truth == 191] <- 19.1
-truth[truth == 192] <- 19.2
-truth <- factor(truth, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-
-prediction <- ridge_pred$prediction
-prediction[prediction == 191] <- 19.1
-prediction[prediction == 192] <- 19.2
-prediction <- factor(prediction, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-
-ridge_pred <- data.frame(truth, prediction, model = "Ridge (L2)")
-
-(table(prediction, truth) %>%
-  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table
-
-latex_out <- capture.output(as.data.frame(unclass((table(prediction, truth) %>%
-  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table))
- %>%
-  stargazer(summary = F,
-            title = "Confusion matrix for the test data (Ridge L2)", 
-            label = "tab:confusion-mat-ridge"))
-
-latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} cccccccccccccccccc", "\\\\textwidth\\}\\{XXXXXXXXXXXXXXXXXX") %>% cat(sep = "\n"), file = "tables/confusion-mat-ridge.tex")
-
-issue_eval_ridge <- data.frame(truth = truth, prediction = prediction) %>% 
-  group_by(truth) %>% 
-  dplyr::mutate(accuracy = accuracy(truth, prediction)) %>% select(-c("prediction")) %>% unique() %>%
-  merge(., data.frame(truth = levels(truth),
-           precision = precision(truth, prediction),
-           recall = recall(truth, prediction),
-           f1_score = f1_score(truth, prediction)), by = "truth") %>% 
-  dplyr::rename("Accuracy" =  accuracy, "Precision" = precision, "Recall" = recall, "F1 score" = f1, Issue = truth)
-issue_eval_ridge[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval_ridge[, c("Accuracy", "Precision", "Recall", "F1 score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 3))
-
-# Change and order labels
-issue_eval_ridge$Issue <- factor(issue_eval_ridge$Issue, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-
-issue_eval_ridge <- issue_eval_ridge[order(issue_eval_ridge$Issue), ]
-issue_eval_ridge$Issue <- str_c(as.character(issue_eval_ridge$Issue), " - ", issue_categories[c(1, 10, 11:17, 22:23, 2, 18:19, 3:9, 20:21), 2])
-
-# Accuracy
-accuracy(truth, prediction)
-
-```
-
-
-## Transformers (GBERT)
-
-```{r  confusion-gbert}
-# Import results
-transfer_pred <- read_csv("transfer-files/bert-pred.csv", col_names = F)
-names(transfer_pred) <- c("prediction_label",  "issue", "label",  "cv_sample")
-labels <- select(transfer_pred, c(label, issue)) %>% unique %>% dplyr::rename(prediction = issue)
-transfer_pred <- merge(transfer_pred, labels, by.x = "prediction_label", by.y = "label") %>% select(-c(prediction_label))
-
-# Confusion matrix and overall statistics
-transfer_pred$issue %>% table
-
-truth <- transfer_pred$issue
-truth[truth == 191] <- 19.1
-truth[truth == 192] <- 19.2
-truth <- factor(truth, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-
-prediction <- transfer_pred$prediction
-prediction[prediction == 191] <- 19.1
-prediction[prediction == 192] <- 19.2
-prediction <- factor(prediction, levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-
-transfer_pred <- data.frame(truth, prediction, model = "Transformers")
-
-(table(prediction, truth) %>%
-  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table
-
-latex_out <- capture.output(as.data.frame(unclass((table(prediction, truth) %>%
-  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table))
- %>%
-  stargazer(summary = F,
-            title = "Confusion matrix for the test data (Transformers)", 
-            label = "tab:confusion-mat-transfer"))
-
-latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} cccccccccccccccccc", "\\\\textwidth\\}\\{XXXXXXXXXXXXXXXXXX") %>% cat(sep = "\n"), file = "tables/confusion-mat-transfer")
-
-issue_eval_transfer <- data.frame(truth = truth, prediction = prediction) %>% 
-  group_by(truth) %>% 
-  dplyr::mutate(accuracy = accuracy(truth, prediction)) %>% select(-c("prediction")) %>% unique() %>% 
-  merge(., data.frame(truth = levels(truth),
-                      precision = precision(truth, prediction),
-                      recall = recall(truth, prediction),
-                      f1_score = f1_score(truth, prediction)), by = "truth") %>% 
-  dplyr::rename("Accuracy" =  accuracy, "Precision" = precision, "Recall" = recall, "F1 score" = f1, Issue = truth)
-
-issue_eval_transfer[, c("Accuracy", "Precision", "Recall", "F1 score")] <- issue_eval_transfer[, c("Accuracy", "Precision", "Recall", "F1 score")] %>% apply(., MARGIN = 2, FUN = function (x) round(as.numeric(x), 3))
-
-# Order and add names
-issue_eval_transfer <- issue_eval_transfer[order(issue_eval_transfer$Issue), ]
-issue_eval_transfer$Issue <- str_c(as.character(issue_eval_transfer$Issue), " - ", issue_categories[c(1, 10, 11:17, 22:23, 2, 18:19, 3:9, 20:21), 2])
-
-# Write latex table
-if(!dir.exists("tables")) dir.create("tables")
-
-# Accuracy
-accuracy(truth, prediction)
-
-
-# Merge with issue_eval_ridge
-issue_eval_ridge_transfer <- merge(select(issue_eval_ridge, c(Issue, Accuracy)) %>% dplyr::rename("Ridge" = Accuracy), select(issue_eval_transfer, c(Issue, Accuracy)) %>% dplyr::rename("Transformers" = Accuracy), by = "Issue")
-issue_eval_ridge_transfer <- issue_eval_ridge_transfer[order(issue_eval_ridge_transfer$Issue %>% str_extract("^[:digit:]\\.?[:digit:]?") %>% as.numeric()), ]
-
-latex_out <- capture.output(issue_eval_ridge_transfer %>%
-  stargazer(out = "tables/issue-eval-ridge-transfer.tex", summary = F, rownames = F, 
-            title = "Performance statistics by issue for different models", 
-            label = "tab:issue_eval_transfer_ridge_transfer"))
-
-accuracy(truth[!(truth %in% c(2, 20, 98, 99))], prediction[!(truth %in% c(2, 20, 98, 99))])
-
-```
-
-
-Regarding the issues, the classifiers works better for specific issue categories.
-
-While some have a higher than average sensitivity (e.g. 4 - Agriculture, 7 - Env. & Energy, 9 - Immigration, 191 - Int. Affairs), others fare worse than average (e.g. 2- Civil Rights, 20 - Gov. Ops., 99 - Other). Unsurprisingly, these rather unspecific categories are difficult to predict. Without them, the accuracy of the Transformers model rises to above 80%.
-
-The better sensitivity for other categories is likely the result of a more specific use of words. Category 17 - Technology may feature a worse accuracy (especially for Ridge) because it is underrepresented in the labeled data. Category 15 - Commerce is often misclassified as 191 - Int. Affairs and 192 - EU: Categories where a press release may contain similar words.
-
-16 - Defense is often misclassified as 191 - International Affairs.
-
-
-# Accuracy of predicted proportions
-
-Since we are most interested in the prediction of proportions (i.e. how many press releases were dedicated to issue X in a given time frame), we analyze the accuracy of predicted proportions.
-
-To do so, we rely on the top-performing single classifier, Ridge (L2), and perform a five-fold cross-validation.
-
-We find the greatest average difference in predicted and actual proportions for 19.1 - International Affairs with 4.8%. And the lowest for 6 - Education wit 0.4%.
-
-The MSE is 1.33%.
-
-```{r prop}
-# Load
-load("readme-files/readme_agg.RData")
-
-# Aggregate
-# Accuracy of predicted proportions (five-fold cross-validation)
-
-# Ridge
-ridge_agg <- merge(table(ridge_pred$truth) / nrow(ridge_pred), table(ridge_pred$prediction) / nrow(ridge_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, truth = Freq.x, prediction = Freq.y) %>% dplyr::mutate(model = "Ridge (L2)")
-ridge_agg <- ridge_agg[order(ridge_agg$Issue), ]
-ridge_agg$Issue <- str_c(as.character(ridge_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
-
-# Transformers
-transfer_agg <- merge(table(transfer_pred$truth) / nrow(transfer_pred), table(transfer_pred$prediction) / nrow(transfer_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, truth = Freq.x, prediction = Freq.y) %>% dplyr::mutate(model = "Transformers")
-transfer_agg <- transfer_agg[order(transfer_agg$Issue), ]
-transfer_agg$Issue <- str_c(as.character(transfer_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
-
-# Readme
-
-three_agg <- rbind.fill(readme_agg, transfer_agg, ridge_agg)
-
-# Difference in percentage points (positive values indicate an inflated prediction, i.e. we estimate a higher share for the category compared to the truth)
-three_agg$difference <- three_agg$prediction - three_agg$truth
-three_agg[, c("truth", "prediction", "difference")] <- apply(three_agg[, c("truth", "prediction", "difference")], MARGIN = 2, function (x) round(x, 3)) # Round
-
-# MSE
-print(sum((three_agg$difference*100)^2)/nrow(three_agg)) # 1.056
-
-# Plot
-# Plotting aggregate evaluation in one plot
-ggplot(three_agg, aes(x = truth, y = prediction)) +
-  geom_abline(slope = 1, color = "light grey") +
-  geom_text_repel(label = three_agg$Issue %>%
-              str_extract("[:digit:]{1,2}(\\.[:digit:])?"),
-              box.padding = .4,
-            color = "dark grey", size = 2, family = "LM Roman 10", 
-            segment.size = .25, 
-            min.segment.length = .1,
-            point.padding = .15, max.overlaps = 100) +
-    geom_point(shape = "o", aes(color = Issue), alpha = .75) +
-  ylim(c(0, .2)) + xlim(c(0, .2)) +
-  guides(color = guide_legend(ncol = 3)) +
-  labs(color = "Issue category") +
-  theme(legend.position = "bottom",
-        legend.title = element_blank(),
-        aspect.ratio = 1, 
-        text = element_text(size = 7),
-        legend.key.size =  unit(.5,"line"),
-        legend.text = element_text(size = 5)) +
-  facet_wrap(~ model) 
-
-  ggsave("plots/agg_eval_compare_facet.pdf", device = cairo_pdf, width = 3*2^.5, height = 3)
+for (country in press$country %>% unique) {
+  print(country)
   
-  ggsave("plots/agg_eval_compare_facet.png",  
-         width = 3*2^.5, height = 3)
+  countrycorpus <-  presscorpus[presscorpus$country == country & presscorpus$cv_sample != -1, ]
+  ndoc(countrycorpus) %>% print
+  
+  # Stopwords
+  if(country == "poland") countrystop <-  stopwords::stopwords("pl", source = "stopwords-iso") else countrystop <- stopwords(str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl", "ireland" = "en", "uk" = "en", "sweden" = "sw", "denmark" = "da")))
+  countrystop
 
-# Write table
-three_agg <- three_agg %>% select(c(Issue, difference, model)) %>% pivot_wider(id_cols = "Issue", names_from = "model", values_from = "difference")
-
-three_agg %>% kbl(booktabs = T, row.names = F)
-
-latex_out <- capture.output(three_agg %>%
-  stargazer(out = "tables/aggregated-eval.tex", summary = F, rownames = F, 
-            title = "Difference between predicted and true proportions for different models", 
-            label = "tab:aggregated-eval"))
-
-```
-
-# Key features for the categories
-
-```{r keyness_tables, out.width = "80%"}
-# Ridge (L2) with full labeled data
-tm_ridge <- textmodel_svm(dfmat_alt, dfmat_alt$issue, type = 7)
-
-# Key words/features for classified topics
-key_feats <- data.frame()
-for (i in rownames(tm_ridge$weights)) key_feats <- 
-  data.frame(issue = i) %>% 
-  cbind(sort(tm_ridge$weights[which(rownames(tm_ridge$weights) == i),], decreasing = T)[1:5] %>% 
-          attr("names") %>% str_replace_all("\\_", " ") %>% t) %>% rbind.fill(key_feats)
-
-key_feats <- key_feats[order(key_feats$issue %>% str_replace_all(c("191" = "19.1", "192" = "19.2")) %>% as.numeric), ]
-
-key_feats$issue <- levels(readme_agg$issue)
-key_feats %>% kbl(booktabs = T, row.names = F)
-
-latex_out <- capture.output(stargazer(key_feats, summary = F,
-            title = "Key features for each issue (Ridge L2)", 
-            label = "tab:key_feats", 
-  out = "tables/key_feats.tex"))
-
-```
-
-
-# Training data size and accuracy
-
-To test the influence of the size of the training dataset on the accuracy, we estimate models with smaller sizes.
-
-To do so, we rely on the top-performing single classifier, Ridge (L2), as well as the fine-tuned Transformers model.
-
-The size of the training dataset affects the accuracy of our model. Our analysis suggests that an enlargement of our training dataset would only lead to marginal performance improvements. On the contrary, the Transformers model already yields an accuracy of over 70% with only about 750 coded press releases.
-
-
-```{r train-size, eval=FALSE}
-trainsize_ridge <- c(5, 25, 50, 100, 200, 300, 400, 500, 600, 700, 1000, 1500, 1750, 2000, 2095)
-trainsize_ridge <- data.frame(Model = "Ridge (L2)",
-                              train_size = trainsize_ridge)
-
-load("other-countries/textpress.RData")
-corp_press <- corpus(textpress$htext,
-                       docvars = select(textpress, c(country, issue, party, cv_sample)))
-dfmat_alt <- corpus_subset(corp_press, country == "spain" & !is.na(issue)) %>%
+  # Create dfm
+  dfmat <- countrycorpus %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(min_docfreq = 0.005, max_docfreq = .9, # Remove words occurring <.5% or > 80% of docs
+             docfreq_ = "prop") %>%
+    suppressWarnings()
+  
+  # Create alternative dfm (bigrams and tfidf)
+  dfmat_alt <- countrycorpus %>%
     tokens() %>% tokens_ngrams(n = 1:2) %>%
-    dfm(remove = stopwords("es"), # Stem and remove stopwords, punctuation etc.
-        remove_punct = T, remove_number = T, remove_symbols = T, remove_url =   T) %>% dfm_wordstem(language = "es") %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
     dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
              docfreq_ = "prop") %>%
-     dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
-             docfreq_ = "count")
+    dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
+             docfreq_ = "count") %>% suppressWarnings()
 
-trainsize_ridge$accuracy <- sapply(trainsize_ridge$train_size, FUN = function (x) {
-  sub_train <- sample(1:ndoc(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)), x)
-  ridge_opt_mod <- textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)[sub_train, ], dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1)$issue[sub_train], type = 7)
-  accuracy(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue, predict(ridge_opt_mod, newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)))}) %>% unlist
+  for (i in 1:5) {
+    print(i)
+    ridge_pred <- data.frame(country = country,
+                             cv_sample = i,
+                             prediction = textmodel_svm(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i), dfm_subset(dfmat_alt, dfmat_alt$cv_sample != i)$issue, type = 7) %>%
+        predict(., newdata = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)),
+        issue = dfm_subset(dfmat_alt, dfmat_alt$cv_sample == i)$issue) %>% rbind.fill(ridge_pred)
+    
+  }
+}
 
-# Load the results from BETO transformer models
-trainsize_transfer <- read_csv("other-countries/results-training-size-beto.csv", col_names = F)
-names(trainsize_transfer) <- c("accuracy", "train_size")
-trainsize_transfer$Model <- "Transformers"
-train_size <- rbind(trainsize_transfer, trainsize_ridge)
+ridge_pred$issue <- str_replace_all(ridge_pred$issue, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+ridge_pred$prediction <- str_replace_all(ridge_pred$prediction, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
 
-# Load the results from multilingual transformer models
-trainsize_multi <- read_csv("other-countries/results-training-size-multilingual.csv", col_names = F)
-names(trainsize_multi) <- c("accuracy", "train_size")
-trainsize_multi$Model <- "Transformers (multilingual)"
-train_size <- rbind(train_size, trainsize_multi)
+save(ridge_pred, file = "files/ridge-pred.RData")
+} else load("files/ridge-pred.RData")
 
-ggplot(train_size, aes(x = train_size, y = accuracy)) + 
-  theme(text = element_text(size = 16),
-        legend.position = "bottom") +
-  # geom_smooth(aes(color = Model, lty = Model), method = "loess", formula = "y ~ x", se = F) +
-  geom_line(aes(group = Model, color = Model, lty = Model),
-               stat="smooth", method = "loess", formula = "y ~ x",
-               size = .7, linetype = 2, alpha = 0.7, se = F) +
-  geom_point(aes(color = Model, shape = Model)) + 
-  xlab("Size of training dataset") + 
-  ylab("Accuracy") +
-  xlim(c(NA, 2000))
 
-  ggsave(str_c("plots/training-size-simulation.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
-  ggsave(str_c("plots/training-size-simulation.png"), width = 5*2^.5, height = 5)
+(table(ridge_pred$prediction, ridge_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% 
+  cbind(., rowSums(.)) %>% rbind(., colSums(.))
 
+# Normalized (rowsums)
+confusion <- round((table(ridge_pred$prediction, ridge_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table / ((table(ridge_pred$prediction, ridge_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% rowSums()) * 100, 0)
+
+confusion <- cbind(confusion, confusion_abs[, ncol(confusion_abs)]) %>% rbind(confusion_abs[nrow(confusion_abs),] )
+
+latex_out <- capture.output(as.data.frame(unclass(confusion))
+ %>%
+  stargazer(summary = F,
+            title = "Confusion matrix for the test data (Ridge (L2), normalized)", 
+            label = "tab:confusion-ridge"))
+
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} cccccccccccccccccc", "\\\\textwidth\\}\\{XXXXXXXXXXXXXXXXXX") %>% cat(sep = "\n"), file = "tables/confusion-ridge.tex")
 
 ```
 
+```{r  confusion-transformer}
 
+multi_pred <- read_csv("files/multilingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id")) %>% dplyr::rename("pred_label" = "prediction") %>% 
+  merge(., data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label)) %>% 
+  merge(., data.frame(prediction = unique(press$issue) %>% sort, pred_label = (1:length(unique(press$issue) %>% sort) - 1)), by = "pred_label") %>% select(-c(pred_label))
+
+# Confusion matrix and overall statistics
+multi_pred$issue %>% table
+
+multi_pred$issue <- str_replace_all(multi_pred$issue, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+multi_pred$prediction <- str_replace_all(multi_pred$prediction, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+
+if(!file.exists("files/multi_pred.RData")) save(multi_pred, file = "files/multi_pred.RData")
+
+confusion_abs <- (table(multi_pred$prediction, multi_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% 
+  cbind(., rowSums(.)) %>% rbind(., colSums(.))
+
+# Normalized (rowsums)
+confusion <- round((table(multi_pred$prediction, multi_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table / ((table(multi_pred$prediction, ridge_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% rowSums()) * 100, 0)
+
+confusion <- cbind(confusion, confusion_abs[, ncol(confusion_abs)]) %>% rbind(confusion_abs[nrow(confusion_abs),] )
+
+latex_out <- capture.output(as.data.frame(unclass(confusion))
+ %>%
+  stargazer(summary = F,
+            title = "Confusion matrix for the test data (Multilingual Transformer, normalized)", 
+            label = "tab:confusion-tf"))
+
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} cccccccccccccccccccccccc", "\\\\textwidth\\}\\{r|XXXXXXXXXXXXXXXXXXXXXXX") %>% cat(sep = "\n"), file = "tables/confusion-tf.tex")
+
+```
+
+```{r  cross}
+cross <- filter(press, !is.na(issue) & !is.na(issue_cross)) %>% select("country", "issue", "issue_cross")
+
+# Confusion matrix and overall statistics
+press$issue %>% table
+press$issue_cross %>% table
+
+cross$issue <- str_replace_all(cross$issue, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+cross$issue_cross <- str_replace_all(cross$issue_cross, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+
+save(cross, file = "files/cross.RData")
+
+confusion_abs <- (table(cross$issue_cross, cross$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% 
+  cbind(., rowSums(.)) %>% rbind(., colSums(.))
+
+# Normalized (rowsums)
+confusion <- round((table(cross$issue_cross, cross$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table / ((table(cross$issue_cross, cross$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% rowSums()) * 100, 0)
+
+confusion <- cbind(confusion, confusion_abs[, ncol(confusion_abs)]) %>% rbind(confusion_abs[nrow(confusion_abs),] )
+
+latex_out <- capture.output(as.data.frame(unclass(confusion))
+ %>%
+  stargazer(summary = F,
+            title = "Confusion matrix for hand coding (Coder 1 x Coder 2))", 
+            label = "tab:confusion-hand"))
+
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} cccccccccccccccccccccccc", "\\\\textwidth\\}\\{r|XXXXXXXXXXXXXXXXXXXXXXX") %>% cat(sep = "\n"), file = "tables/confusion-hand.tex")
+
+
+# Krippendorff's alpha
+load("files/cross.RData")
+
+cross %>%  group_by(country) %>% 
+  summarise(kalpha = kripp.alpha(as.matrix(cbind(issue, issue_cross)) %>% t, method = "nominal")['value'] %>% unlist) %>% as.data.frame() %>% mutate(country = str_to_title(country)) %>% 
+  stargazer(summary = F,rownames = F, 
+            title = "Inter-coder agreement, Krippendorff's alpha", 
+            label = "krippendorf",
+            out = "tables/krippendorff.tex", digits = 3)
+
+
+
+
+```
 
 
 ```{r script_eval}

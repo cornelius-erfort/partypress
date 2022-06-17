@@ -14,6 +14,7 @@ knitr::opts_knit$set(root.dir = dirname(getwd()))
 
 ```
 
+
 # Setting up
 
 This script requires the files which are not included on GitHub.
@@ -22,220 +23,281 @@ This script requires the files which are not included on GitHub.
 
 This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
 
-```{r packages, message=FALSE, warning=FALSE, results='hide'}
+```{r packages, message=FALSE, warning=FALSE, include=FALSE, results='hide'}
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "kableExtra", "stargazer", "xlsx")
+  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "quanteda.classifiers", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "openxlsx", "tools", "caret", "Seurat")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+
 invisible(lapply(packages, require, character.only = T))
 
 theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
 
-set.seed(4325)
+# loadfonts()
+# loadfonts(device = "pdf")
+source("scripts/functions.R")
+
+seed <- 1621447882
+set.seed(seed)
+
+if(!dir.exists("files")) dir.create("files")
+
 ```
 
-## Loading data
+## Load the unlabeled data
 
-For the evaluation of classifiers, we use the data for Germany.
+```{r unlabeled, out.width = "80%"}
+list.files("data/all")
 
-The data for Germany consists of 2,612 labeled press releases. The dataset is not uploaded on GitHub.
+
+if(file.exists("data/unlabeled.RData")) load("data/unlabeled.RData") else {
+  unlabeled <- data.frame()
+
+  for (country in list.files("data/all", full.names = T)) {
+    print(country)
+    load(country)
+    unlabeled <- get(basename(country) %>% str_remove("\\.[:alpha:]*")) %>% 
+      filter(!is.na(date)) %>% mutate(date = str_replace_all(date, "_", "-")) %>%
+      select(c(country, id, party, year, date, filepath, header, text)) %>%
+      rbind.fill(unlabeled)
+  }
+  
+  
+  # Remove press releases without date
+  unlabeled$date <- ymd(unlabeled$date)
+  unlabeled <- filter(unlabeled, !is.na(date))
+
+  save(unlabeled, file = "data/unlabeled.RData")
+}
+
+
+table(unlabeled$country)
+
+```
+
+
+
+## Load the labeled data
 
 ```{r data, out.width = "80%"}
-labeled <- read.xlsx("data/labeled/germany-labeled.xlsx", sheetIndex = 1) %>%
-  suppressWarnings()
-nrow(labeled)
+# Read the labeled data into one dataframe
 
-# Clean
-labeled <- labeled %>% mutate(issue = issue %>% as.numeric())
+if(file.exists("data/labeled.RData")) load("data/labeled.RData") else {
+  labeled <- data.frame()
 
-table(labeled$issue, useNA = "always")
-
-# Subset to relevant vars
-textpress <- labeled %>% select("header", "text", "issue", "position", "id", "party", "date")
-rm(labeled)
-
-# Distribution of issues in the hand-coded sample
-table(textpress$issue) %>% as.data.frame() %>% dplyr::rename(issue = Var1, n = Freq) %>% t() %>% kbl(booktabs = T) %>% 
-  kable_styling(latex_options = "scale_down")
-
-```
-
-## Prepare data
-
-Add issue category names, unify parties, add variable for cross-validation.
-
-```{r prepare}
-
-# Category descriptions
-issue_categories <- 
-  data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 191:192), 
-             issue_descr = c("Macroeconomics", "Civil Rights", 
-                                "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", 
-                                "Immigration", "Transportation", "Law and Crime", "Social Welfare",
-                             "Housing", "Domestic Commerce", "Defense", "Technology", 
-                             "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
-issue_categories %>% dplyr::rename("Issue number" = issue, "Issue name" = issue_descr) %>% 
-  kbl(booktabs = T)
-
-
-# Party names
-party_names <- data.frame(party = c("90gruene_fraktion", 
-                                    "afd_bundesverband", "afd_fraktion",
-                                    "fdp_bundesverband", "fdp_fraktion",
-                                    "linke_fraktion", "spd_fraktion",
-                                    "union_fraktion"), 
-                          party_name = c("Bündnis 90/Die Grünen - Fraktion", 
-                                         "AfD - Bundesverband", "AfD - Fraktion", 
-                                         "FDP - Bundesverband", "FDP - Fraktion", 
-                                         "DIE LINKE - Fraktion", "SPD - Fraktion", 
-                                         "CDU/CSU - Fraktion"))
-textpress <- merge(textpress, party_names, by = "party")
-
-# Distribution by parties
-table(textpress$party_name) %>% as.data.frame() %>% 
-  dplyr::rename(party = Var1, n = Freq) %>% kbl(booktabs = T)
-
-table(textpress$party_name, substr(textpress$date, 1, 4)) %>% 
-  as.data.frame.matrix() %>% kbl(booktabs = T)
-
-# Combine header and text
-textpress$htext <- str_c(textpress$header, " ", textpress$text)
-
-# Make order of documents random
-textpress <- textpress[sample(1:nrow(textpress), nrow(textpress)), ]
-textpress$cv_sample <- sample(1:5, nrow(textpress), replace = T)
-
-if(!dir.exists("supervised-files")) dir.create("supervised-files")
-if(!dir.exists("supervised-files/data")) dir.create("supervised-files/data")
-
-# Save dataframe (do not overwrite because the cross-validation folds are saved here)
-if(!file.exists("supervised-files/data/textpress.RData")) save(textpress, file = "supervised-files/data/textpress.RData") else{
-  load("supervised-files/data/textpress.RData")
-}
-```
-
-
-# Supervised models
-## Creating the document frequency matrix (dfm)
-
-We create a text corpus based on the header and text of each press release. We draw a random sample from the corpus to create a training and a test dataset. The test dataset consists of approx. one fifth of the documents.
-
-Subsequently, we follow standard procedures for the preparation of the document frequency matrix. First, we remove stopwords and stem the words in order to better capture the similarities across documents. Second, we remove all punctuation, numbers, symbols and URLs. In a last step, we remove all words occurring in less than 0.5% or more than 90% of documents.
-
-
-```{r dfm}
-if(!dir.exists("supervised-files")) dir.create("supervised-files")
-
-if(file.exists("supervised-files/data/dfmat.RData")) {
-   load("supervised-files/data/dfmat.RData")
-   load("supervised-files/data/dfmat_alt.RData")
-} else {
+  for (country in list.files("data/labeled", full.names = T) %>% str_subset("(xlsx)|(csv)")) {
     
-corp_press <- corpus(str_c(textpress$header, " ", textpress$text),
-                       docvars = select(textpress, c(id, issue, party_name, cv_sample)))
+    if(file_ext(country) == "xlsx") {
+      print("xlsx")
+      print(country)
+      labeled_c <- read.xlsx(country) 
+      if(names(labeled_c) %>% str_detect("Spalte") %>% any()) labeled_c <- select(labeled_c, -c(starts_with("Spalte"))) 
+        # Add var for cross validation
+        labeled_c$cv_sample <- createFolds(1:nrow(labeled_c), k = 5, list = F)
+      labeled <- labeled_c %>% 
+        mutate(country = basename(country) %>% str_remove("-.*")) %>% 
+        rbind.fill(labeled)
+      print(nrow(labeled))
+    } else {
+      print("csv")
+      print(country)
+      labeled_c <- read.csv(country,
+                          encoding = ifelse(str_detect(country, "spain"), "latin1", "unknown"),
+                          sep = ",")
+      if(names(labeled_c) %>% str_detect("Spalte") %>% any()) labeled_c <- labeled_c %>% select(-c(starts_with("Spalte")))
+        # Add var for cross validation
+        labeled_c$cv_sample <- createFolds(1:nrow(labeled_c), k = 5, list = F)
+      labeled <- labeled_c  %>% 
+        mutate(country = basename(country) %>% str_remove("-.*")) %>% 
+        rbind.fill(labeled)
+      print(nrow(labeled))
+    } 
+  }
+  
+  # Tidy date and remove press releases without date
+  labeled$date[substr(labeled$date, 5, 5) == "-"] <- labeled$date[substr(labeled$date,   5, 5) == "-"] %>% ymd()
+  labeled$date[substr(labeled$date, 3, 3) %in% c("-", "/")] <-   labeled$date[substr(labeled$date, 3, 3) %in% c("-", "/")] %>% dmy()
+  labeled$date <- labeled$date %>% as.numeric() %>% as.Date(origin = "1970-01-01")
+  labeled <- filter(labeled, !is.na(date))
+  
 
-# Create dfm
-dfmat <- corpus_subset(corp_press) %>%
-  dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
-      stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
-  dfm_trim(min_docfreq = 0.005, max_docfreq = .9, # Remove words occurring <.5% or > 80% of docs
-           docfreq_ = "prop") %>%
-  suppressWarnings()
-save(dfmat, file = "supervised-files/data/dfmat.RData")
+  
+  # Tidy issue
+  labeled$issue <- str_replace_all(labeled$issue, c("19a" = "191", "19A" = "191", "19b" =  "192", "2 or 192" = "2", "98 or 191" = "98", "201" = "20", "145" = "14", "19$" = "191"))
+  labeled$issue <- ifelse(labeled$issue %in% c("0", "."), NA, labeled$issue)
 
+  table(labeled$issue, useNA = "always")
+  labeled <- filter(labeled, !is.na(issue) & issue != ".")
+  
+  labeled$issue %>% unique
+  
+  labeled$issue_cross <- str_replace_all(labeled$issue_cross, c("19a" = "191", "19A" = "191", "19b" =  "192", "2 or 192" = "2", "98 or 191" = "98", "201" = "20", "145" = "14", "19$" = "191", "98 or 191" = "98"))
+  labeled$issue_cross[labeled$issue_cross == "."] <- NA
+  labeled$issue_cross %>% unique
 
+    # Tidy position
 
-# Create alternative dfm (bigrams and tfidf)
-dfmat_alt <- corpus_subset(corp_press) %>%
-  tokens() %>% tokens_ngrams(n = 1:2) %>%
-  dfm(remove = stopwords("de"), # Stem and remove stopwords, punctuation etc.
-      stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
-  dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
-           docfreq_ = "prop") %>%
-   dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
-           docfreq_ = "count") %>% suppressWarnings()
+  labeled$position %>% table
+  labeled$position <- str_replace_all(labeled$position, c("1;1" = "1", "11" = "1", "22" = "2", "24" = "2")) %>% as.numeric()
+  labeled$position_cross %>% table
+  labeled$position_cross <- str_replace_all(labeled$position_cross, c("1;1" = "1", "11" = "1", "22" = "2", "24" = "2")) %>% as.numeric()
 
-save(dfmat_alt, file = "supervised-files/data/dfmat_alt.RData")
+  labeled <- labeled %>% select("country", "header", "text", "issue", "issue_cross", "position", "position_cross", "party", "date", "cv_sample", "id")
+  
+  
 
+  
+  table(labeled$country, labeled$cv_sample)
+  
+  # Sort documents
+  labeled <- labeled[order(labeled$country, labeled$id), ]
+  
+  # save(labeled, file = "data/labeled.RData")
 }
 
+labeled$country  %>% table
+
+table(labeled$country, useNA = "always")
+
+
 ```
+
+
+# Add labels to unlabeled data to create the main dataset
+```{r}
+unlabeled$id <- as.numeric(unlabeled$id)
+labeled$id <- as.numeric(labeled$id)
+
+press <- merge(unlabeled, labeled %>% select(country, id, issue, position, issue_cross, position_cross, cv_sample), by = c("country", "id"), all.x = T)
+press$cv_sample[is.na(press$cv_sample)] <- -1
+```
+
+# Add parlgov labels
+
+```{r}
+
+# press$party %>% unique
+
+parties <- read.xlsx("data/parties-import.xlsx")
+
+(press$party %>% unique) %in% parties$X6
+
+press <- merge(press, parties, by.x = c("country", "party"), by.y = c("country_name", "X6"), all.x = T)
+
+press$parlgov_id %>% unique %>% sort %>% length 
+# 67 different parlgov_ids
+
+press <- merge(press, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "issue", all.x = T)
+
+press$label[is.na(press$label)] <- -1
+
+save(press, file = "files/press.RData")
+write.csv(press, file = "files/press.csv")
+
+```
+
 
 # Superlearner
+
 ``` {r superlearner}
-if(!dir.exists("superlearner-files")) dir.create("superlearner-files")
+presscorpus <- corpus(str_c(press$header, " ", press$text),
+                       docvars = select(press, c(country, id, issue, party_name, cv_sample)))
 
-## Create training and test set (also as csv for Python)
-cbind(cv_sample = dfmat$cv_sample, label = dfmat$issue, as.data.frame(dfmat)) %>% select(-c(doc_id)) %>% write.csv("superlearner-files/dfmat.csv", row.names = F)
+for (country in press$country %>% unique) {
+  print(country)
+  
+  countrycorpus <-  presscorpus[presscorpus$country == country & presscorpus$cv_sample != -1, ]
+  ndoc(countrycorpus) %>% print
+  
+  # Stopwords
+  if(country == "poland") countrystop <-  stopwords::stopwords("pl", source = "stopwords-iso") else countrystop <- stopwords(str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl", "ireland" = "en", "uk" = "en", "sweden" = "sw", "denmark" = "da")))
+  countrystop
+  
+  
+  if(!file.exists(str_c("files/dfmat-", country, ".csv"))) {
+    # Create dfm
+  dfmat <- countrycorpus %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(min_docfreq = 0.005, max_docfreq = .9, # Remove words occurring <.5% or > 80% of docs
+             docfreq_ = "prop") %>%
+    suppressWarnings()
+  
+  # Save
+  cbind(cv_sample = dfmat$cv_sample, label = dfmat$issue, as.data.frame(dfmat))[, -c(3)] %>% write.csv(str_c("files/dfmat-", country, ".csv"), row.names = F)
+  }
+  
+    if(!file.exists(str_c("files/dfmat_alt-", country, ".csv"))) {
+      # Create alternative dfm (bigrams and tfidf)
+  dfmat_alt <- countrycorpus %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
+             docfreq_ = "prop") %>%
+    dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
+             docfreq_ = "count") %>% suppressWarnings()
+  
+  
+  
+  
+  
+  # Save
+  cbind(cv_sample = dfmat_alt$cv_sample, label = dfmat_alt$issue, as.data.frame(dfmat_alt))[, -c(3)] %>% write.csv(str_c("files/dfmat_alt-", country, ".csv"), row.names = F)
+    }
+  
 
-## Create training and test set (also as csv for Python)
-cbind(cv_sample = dfmat_alt$cv_sample, label = dfmat_alt$issue, as.data.frame(dfmat_alt)) %>% select(-c(doc_id)) %>% write.csv("superlearner-files/dfmat_alt.csv", row.names = F)
+}
+
+```
+
+
+```{r descriptives}
+
+# load("files/press.RData")
+
+
+
+table(press$year, press$party_name, press$country) %>% as.data.frame() %>% 
+  dplyr::rename(year = Var1, party = Var2, country = Var3, count = Freq) %>% filter(count > 0 & party != "Kukiz'15 (2015-2019)") %>% 
+  mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
+    ggplot() + 
+    geom_point(aes(x = year, y = party, size = count, color = count)) + 
+    facet_wrap(~country, nrow = 5, ncol = 2, scales = "free_y") + 
+  theme(text=element_text(family="LM Roman 10"))
+  ggsave("coverage_party_year.pdf", device = cairo_pdf, width = 10, height = 8*2^.5)
+  
+  
+  table(press$year, press$country) %>% as.data.frame() %>% 
+  dplyr::rename(year = Var1, country = Var2, count = Freq) %>% filter(count > 0) %>% 
+  mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
+    ggplot() + 
+    geom_point(aes(x = year, y = country, size = count)) +
+    scale_y_discrete(limits=rev) +
+    theme(text=element_text(family="LM Roman 10")) 
+  ggsave("coverage_country_year.pdf", device = cairo_pdf, width = 10, height = 8*2^.5)
+
+
 
 ```
 
-# Readme, semi-supervised, and transfer models
-
-Generate csv file with unlabeled and labeled documents.
-
-```{r semi-transfer}
-if(!dir.exists("semi-files")) dir.create("semi-files")
-if(!dir.exists("transfer-files")) dir.create("transfer-files")
-if(!dir.exists("readme-files")) dir.create("readme-files")
 
 
-# Load all press releases
-load("data/all/germany.RData")
-alldocs <- germany %>% select(country, party, date, header, text, id)
-nrow(alldocs) # 44,950
-names(alldocs)
-
-# Add labels and folds by id from textpress
-load("supervised-files/data/textpress.RData")
-alldocs <- merge(alldocs, select(textpress, c(id, issue, cv_sample)), by = "id", all = T)
-nrow(alldocs) # 44,950
-
-alldocs$cv_sample[is.na(alldocs$cv_sample)] <- -1
-
-
-# alldocs[!(alldocs$id %in% germany$id), ] %>% View
-
-# Combine header and text
-alldocs$htext <- str_c(alldocs$header, " ", alldocs$text)
-alldocs <- select(alldocs, -c(header, text))
-
-alldocs$issue[is.na(alldocs$issue)] <- -1
-
-# Show distribution of text length (labeled data)
-sapply(alldocs$htext[alldocs$issue != -1], str_length) %>% density() %>% plot
-
-# Count words/tokens
-sapply(alldocs$htext, function(x) lengths(gregexpr("\\W+", x)) + 1) %>% summary # max_seq_length = 512
-
-# Make issues compatible with transformers (0-23 instead of CAP labels)
-labels <- data.frame(issue = unique(alldocs$issue) %>% sort, label = c(-1, 0:22))
-alldocs <- merge(alldocs, labels, by = "issue", all.x = T)
-
-
-table(alldocs$issue, useNA = "ifany")
-
-
-# Write to csv
-
-if(!file.exists("transfer-files/alldocs.csv")) write_csv(alldocs, file = "transfer-files/alldocs.csv")
-
-if(!file.exists("semi-files/alldocs.csv")) write_csv(select(alldocs, -c(label)), file = "semi-files/alldocs.csv")
-
-alldocs <- select(alldocs, -c(label))
-
-if(!file.exists("readme-files/alldocs.RData")) save(alldocs, file = "readme-files/alldocs.RData")
-
-
-```
 
 
 ```{r script_eval}
 # Time needed to run script
 print(Sys.time() - start_time) 
 ```
+
+
+
+
+
+
+
+
+
+
