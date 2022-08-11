@@ -199,11 +199,14 @@ for (this_country in unique(issue_agendas$country) %>% sort) {
   plot_data <- filter(plot_data, party_sum > 5)
   
   thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          text = element_text(size = 16)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+          axis.text.y = element_text(size = 14),
+          axis.title = element_text(size = 14),
+          text = element_text(size = 14)) +
     scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
 ) +
-    ylab("Share of press releases per quarter")
+    ylab("Share of press releases per quarter") +
+    xlab("")
   
   thisplot <- thisplot +
         geom_step(color = "dark grey", alpha = .8) +
@@ -220,7 +223,7 @@ for (this_country in unique(issue_agendas$country) %>% sort) {
     thisplot <- thisplot +
       geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
   
-  thisplot <- thisplot + facet_wrap(~ party)
+  thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
   
   thisplot
   

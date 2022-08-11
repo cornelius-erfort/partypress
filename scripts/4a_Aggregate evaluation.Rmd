@@ -194,6 +194,33 @@ agg_eval$issue_plot <- str_c(agg_eval$Issue, " - ", agg_eval$title) %>% factor(l
 
 
 # Plot
+ggplot(filter(agg_eval, model %in% c("Multilingual Transformer")), aes(x = Truth, y = Prediction)) +
+  geom_abline(slope = 1, color = "light grey") +
+  geom_text_repel(label = filter(agg_eval, model %in% c("Multilingual Transformer"))$Issue,
+              box.padding = .4,
+            color = "dark grey", size = 3, family = "LM Roman 10", 
+            segment.size = .25, 
+            min.segment.length = .1,
+            point.padding = .15, max.overlaps = 100) +
+    geom_point(shape = "o", aes(color = issue_plot), alpha = .75) +
+  ylim(c(0, .1)) + xlim(c(0, .10)) +
+  xlab("Human coders") +
+  ylab("Multilingual Transformer") +
+  guides(color = guide_legend(ncol = 3)) +
+  labs(color = "Issue category") +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        aspect.ratio = 1, 
+        text = element_text(size = 10),
+        legend.key.size =  unit(.5,"line"),
+        legend.text = element_text(size = 10),
+        axis.text.x= element_text(size = 10),
+        axis.text.y= element_text(size = 10))
+  
+  ggsave("plots/agg_eval_transformer.pdf", device = cairo_pdf, width = 3, height = 3) # , width = 3*2^.5, height = 3)
+  
+  
+
 # Plotting aggregate evaluation in one plot
 ggplot(filter(agg_eval, model %in% c("Multilingual Transformer", "Ridge (L2)")), aes(x = Truth, y = Prediction)) +
   geom_abline(slope = 1, color = "light grey") +
