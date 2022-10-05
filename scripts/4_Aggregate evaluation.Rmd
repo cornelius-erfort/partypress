@@ -1,0 +1,303 @@
+---
+title: "Evaluation of textmodels"
+author: "Cornelius Erfort"
+date: "8/5/2021"
+output: 
+  pdf_document:
+    dev: cairo_pdf
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F, dev = "cairo_pdf")
+knitr::opts_knit$set(root.dir = dirname(getwd()))
+```
+
+
+
+## Loading packages
+
+This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
+
+```{r packages, message=FALSE, warning=FALSE, results='hide'}
+start_time <- Sys.time()
+
+packages <- c(
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "tidyr", "ggrepel")
+
+lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+
+if(!("quanteda.classifiers" %in% rownames(installed.packages()))) {
+  remotes::install_github("quanteda/quanteda.classifiers")
+} 
+
+invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = T))
+
+loadfonts()
+loadfonts(device = "pdf")
+theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
+
+if(!dir.exists("supervised-files")) dir.create("supervised-files")
+
+source("scripts/functions.R")
+
+load("files/press.RData")
+
+# Seed
+seed <- 1621447882
+set.seed(seed)
+
+```
+
+
+
+
+
+```{r tables}
+categories <- data.frame(issue = c(1:10, 12:18, 20, 23, 98, 99, 19.1, 19.2), 
+             title = c("Macroeconomics", "Civil Rights", "Health", "Agriculture", "Labor", "Education", "Environment", "Energy", "Immigration", "Transportation", "Law and Crime", "Social Welfare","Housing", "Domestic Commerce", "Defense", "Technology", "Foreign Trade", "Government Operations", "Culture", "Non-thematic", "Other", "International Affairs", "European Integration"))
+
+
+```
+
+
+
+```{r  confusion-ridge}
+load("files/ridge-pred.RData")
+
+ridge_pred$issue %>% table
+
+
+```
+
+```{r  confusion-transformer}
+
+load("files/multi_pred.RData")
+multi_pred$issue %>% table
+head(multi_pred)
+
+```
+
+
+
+# Aggregate evaluation
+
+```{r aggregate}
+
+
+# Aggregate evaluation
+
+# Human coders
+load("files/cross.RData")
+cross_agg <- merge(table(cross$issue) / nrow(cross), table(cross$issue_cross) / nrow(cross), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
+  dplyr::mutate(model = "Intercoder", n = nrow(cross))
+cross_agg <- cross_agg[order(cross_agg$Issue), ]
+# cross_agg <- merge(cross_agg, categories, by.x = "Issue", by.y = "issue")
+# cross_agg$Issue <- str_c(cross_agg$Issue, " - ", cross_agg$title)
+
+
+# Transformers multilingual
+load("files/multi_pred.RData")
+multi_pred <- multi_pred[sample(1:nrow(multi_pred), nrow(cross)), ]
+multi_agg <- merge(table(multi_pred$issue) / nrow(multi_pred), table(multi_pred$prediction) / nrow(multi_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
+  dplyr::mutate(model = "Multilingual Transformer", n = nrow(multi_pred))
+multi_agg <- multi_agg[order(multi_agg$Issue), ]
+# multi_agg$Issue <- str_c(as.character(multi_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
+
+# multi_pred <- merge(multi_pred, categories, by.x = "Issue", by.y = "issue")
+
+
+agg_eval <- rbind.fill(multi_agg, cross_agg)
+
+
+# Transformer monolingual
+
+if(file.exists("files/mono_pred.RData"))  load("files/mono_pred.RData") else {
+  mono_pred <- read_csv("files/monolingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id")) %>% dplyr::rename("pred_label" = "prediction") %>% 
+  merge(., data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label)) %>% 
+  merge(., data.frame(prediction = unique(press$issue) %>% sort, pred_label = (1:length(unique(press$issue) %>% sort) - 1)), by = "pred_label") %>% select(-c(pred_label))
+  mono_pred$issue %>% table
+  mono_pred$issue <- str_replace_all(mono_pred$issue, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+  mono_pred$prediction <- str_replace_all(mono_pred$prediction, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
+  save(mono_pred, file = "files/mono_pred.RData")
+}
+mono_pred <- mono_pred[sample(1:nrow(mono_pred), nrow(cross)), ]
+
+
+mono_agg <- merge(table(mono_pred$issue) / nrow(mono_pred), table(mono_pred$prediction) / nrow(mono_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% dplyr::mutate(model = "Monolingual Transformer", n = nrow(mono_pred))
+mono_agg <- mono_agg[order(mono_agg$Issue), ]
+# mono_agg$Issue <- str_c(as.character(mono_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
+
+agg_eval <- rbind.fill(agg_eval, mono_agg)
+
+# Ridge (L2)
+load("files/ridge-pred.RData")
+ridge_pred <- ridge_pred[sample(1:nrow(ridge_pred), nrow(cross)), ]
+ridge_agg <- merge(table(ridge_pred$issue) / nrow(multi_pred), table(ridge_pred$prediction) / nrow(ridge_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
+  dplyr::mutate(model = "Ridge (L2)", n = nrow(ridge_pred))
+ridge_agg <- ridge_agg[order(ridge_agg$Issue), ]
+# ridge_agg$Issue <- str_c(as.character(ridge_agg$Issue), " - ", issue_categories[c(1:17, 22:23, 18:21), 2]) %>% factor()
+
+agg_eval <- rbind.fill(agg_eval, ridge_agg)
+
+
+agg_eval <- merge(agg_eval, categories, by.x = "Issue", by.y = "issue")
+
+
+
+# Difference in percentage points (positive values indicate an inflated prediction, i.e. we estimate a higher share for the category compared to the truth)
+agg_eval$Difference <- agg_eval$Prediction - agg_eval$Truth
+# two_agg[, c("Truth", "Prediction", "Difference")] <- apply(two_agg[, c("Truth", "Prediction", "Difference")], MARGIN = 2, function (x) round(x, 3)) # Round
+
+# MSE
+mse <- agg_eval %>% group_by(model) %>% dplyr::summarise(MSE = sum((Difference*100)^2)/n(), 
+                                                  RMSE = (sum((Difference*100)^2)/n())^.5, n = mean(n)) %>% arrange(MSE)
+
+
+latex_out <- capture.output(mse %>%
+  stargazer(out = "tables/mse.tex", summary = F, rownames = F, 
+            title = "Accuracy of estimated proportions", label = "tab:mse", digits = 3))
+
+# Adjusting categories by sens and spec
+agg_eval
+
+
+# Plots
+
+
+agg_eval$issue_plot <- str_c(agg_eval$Issue, " - ", agg_eval$title) %>% factor(levels = c("1 - Macroeconomics",
+"2 - Civil Rights",
+"3 - Health",
+"4 - Agriculture",
+"5 - Labor",
+"6 - Education",
+"7 - Environment",
+"8 - Energy",
+"9 - Immigration",
+"10 - Transportation",
+"12 - Law and Crime",
+"13 - Social Welfare",
+"14 - Housing",
+"15 - Domestic Commerce",
+"16 - Defense",
+"17 - Technology",
+"18 - Foreign Trade",
+"19.1 - International Affairs",
+"19.2 - European Integration",
+"20 - Government Operations",
+"23 - Culture",
+"98 - Non-thematic",
+"99 - Other" ))
+
+
+
+
+# Plot
+ggplot(filter(agg_eval, model %in% c("Multilingual Transformer")), aes(x = Truth, y = Prediction)) +
+  geom_abline(slope = 1, color = "light grey") +
+  geom_text_repel(label = filter(agg_eval, model %in% c("Multilingual Transformer"))$Issue,
+              box.padding = .4,
+            color = "dark grey", size = 3, family = "LM Roman 10", 
+            segment.size = .25, 
+            min.segment.length = .1,
+            point.padding = .15, max.overlaps = 100) +
+    geom_point(shape = "o", aes(color = issue_plot), alpha = .75) +
+  ylim(c(0, .1)) + xlim(c(0, .10)) +
+  xlab("Human coders") +
+  ylab("Multilingual Transformer") +
+  guides(color = guide_legend(ncol = 3)) +
+  labs(color = "Issue category") +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        aspect.ratio = 1, 
+        text = element_text(size = 10),
+        legend.key.size =  unit(.5,"line"),
+        legend.text = element_text(size = 10),
+        axis.text.x= element_text(size = 10),
+        axis.text.y= element_text(size = 10))
+  
+  ggsave("plots/agg_eval_transformer.pdf", device = cairo_pdf, width = 3, height = 3) # , width = 3*2^.5, height = 3)
+  
+  
+
+# Plotting aggregate evaluation in one plot
+ggplot(filter(agg_eval, model %in% c("Multilingual Transformer", "Ridge (L2)")), aes(x = Truth, y = Prediction)) +
+  geom_abline(slope = 1, color = "light grey") +
+  geom_text_repel(label = filter(agg_eval, model %in% c("Multilingual Transformer", "Ridge (L2)"))$Issue,
+              box.padding = .4,
+            color = "dark grey", size = 2, family = "LM Roman 10", 
+            segment.size = .25, 
+            min.segment.length = .1,
+            point.padding = .15, max.overlaps = 100) +
+    geom_point(shape = "o", aes(color = issue_plot), alpha = .75) +
+  ylim(c(0, .125)) + xlim(c(0, .125)) +
+  guides(color = guide_legend(ncol = 3)) +
+  labs(color = "Issue category") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        aspect.ratio = 1, 
+        text = element_text(size = 7),
+        legend.key.size =  unit(.5,"line"),
+        legend.text = element_text(size = 5)) +
+  facet_wrap(~ model) 
+
+  ggsave("plots/agg_eval_compare_facet.pdf", device = cairo_pdf, width = 3*2^.5, height = 3) # , width = 3*2^.5, height = 3)
+  
+  
+
+# Appendix plot
+ggplot(agg_eval, aes(x = Truth, y = Prediction)) +
+  geom_abline(slope = 1, color = "light grey") +
+  geom_text_repel(label = agg_eval$Issue,
+              box.padding = .4,
+            color = "dark grey", size = 2, family = "LM Roman 10", 
+            segment.size = .25, 
+            min.segment.length = .1,
+            point.padding = .15, max.overlaps = 100) +
+    geom_point(shape = "o", aes(color = issue_plot), alpha = .75) +
+  ylim(c(0, .125)) + xlim(c(0, .125)) +
+  guides(color = guide_legend(ncol = 3)) +
+  labs(color = "Issue category") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        aspect.ratio = 1, 
+        text = element_text(size = 7),
+        legend.key.size =  unit(.5,"line"),
+        legend.text = element_text(size = 5)) +
+  facet_wrap(~ model) 
+
+  ggsave("plots/agg_eval_compare_facet_app.pdf", device = cairo_pdf, height = 5, width = 5) # , width = 3*2^.5, height = 3)
+  
+  
+  
+# Write table
+latex_out <- agg_eval %>% mutate(Difference = as.numeric(Difference * 100)) %>% 
+                              select(c(Issue, title, Difference, model)) %>% pivot_wider(names_from = model, values_from = Difference) %>% 
+  select(c(Issue, title, "Multilingual Transformer", "Monolingual Transformer", "Ridge (L2)", "Intercoder")) 
+latex_out <- latex_out[order(latex_out$Issue),]
+latex_out <- mutate(latex_out, Average = round((as.numeric(`Multilingual Transformer`) + as.numeric(`Monolingual Transformer`) + as.numeric(`Ridge (L2)`))/3, 2))
+
+latex_out[, 3:6] <- latex_out[, 3:6] %>% apply(MARGIN = 2, FUN = function(x) round(as.numeric(x), 2))
+latex_out <- latex_out[, c(1:5,7,6)]
+
+
+latex_out <- capture.output(latex_out %>% mutate(Issue = as.character(Issue)) %>%  
+  stargazer(out = "tables/aggregated-eval.tex", summary = F, rownames = F, 
+            title = "Difference between predicted and true proportions for different models", 
+            label = "tab:aggregated-eval"))
+
+
+
+
+```
+
+
+
+```{r script_eval}
+# Time needed to run script (much shorter when textmodels are just loaded from a file)
+# The estimation time for the single textmodels can found in the table above.
+
+print(Sys.time() - start_time) 
+
+# In total, the script needs about 2-3h to run.

@@ -1,0 +1,151 @@
+---
+title: "Application to unlabeled data"
+author: "Cornelius Erfort"
+date: "8/5/2021"
+output: 
+  pdf_document:
+    dev: cairo_pdf
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
+knitr::opts_knit$set(root.dir = dirname(getwd()))
+```
+
+# Summary
+
+We predict issue labels for all unlabeled German press releases and calculate the share of press releases dedicated to each issue area for each quarter.
+
+# Setting up
+
+This script requires the files which are not included on GitHub.
+
+At the end of this script, the file "issue_agendas.RData" is saved. It contains quarterly estimates for the share of press releases for each issue and party.
+
+## Loading packages
+
+```{r packages, message=FALSE, warning=FALSE, results='hide'}
+start_time <- Sys.time()
+
+packages <- c(
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "ggrepel")
+
+lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+
+if(!("quanteda.classifiers" %in% rownames(installed.packages()))) {
+  remotes::install_github("quanteda/quanteda.classifiers")
+} 
+
+invisible(lapply(c(packages, "quanteda.classifiers"), require, character.only = T))
+
+loadfonts()
+loadfonts(device = "pdf")
+theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
+
+source("scripts/functions.R")
+
+load("files/press.RData")
+
+```
+
+# Load the database
+
+# Visualize issue agendas
+
+```{r}
+
+# Imm
+for (this_country in unique(issue_agendas$country) %>% sort) {
+
+  plot_data <- filter(issue_agendas, country == this_country & issue == 9)
+  
+  plot_data <- filter(plot_data, party_sum > 5)
+  
+  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+          axis.text.y = element_text(size = 14),
+          axis.title = element_text(size = 14),
+          text = element_text(size = 14)) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
+) +
+    ylab("Share of press releases per quarter") +
+    xlab("")
+  
+  thisplot <- thisplot +
+        geom_step(color = "dark grey", alpha = .8) +
+        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
+        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .7,
+                linetype ="dashed",
+                alpha = 0.8, color = "black",
+                se = F)
+  
+  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
+  
+
+    thisplot <- thisplot +
+      geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
+  
+  thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
+  
+  thisplot
+  
+    ggsave(str_c("plots/immigration-agenda-", this_country,".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
+}
+
+# Housing
+for (this_country in "germany" %>% sort) {
+
+  plot_data <- filter(issue_agendas, country == this_country & issue == 14)
+  
+  plot_data <- filter(plot_data, party_sum > 5)
+  
+  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+          axis.text.y = element_text(size = 14),
+          axis.title = element_text(size = 14),
+          text = element_text(size = 14)) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
+) +
+    ylab("Share of press releases per quarter") +
+    xlab("")
+  
+  thisplot <- thisplot +
+        geom_step(color = "dark grey", alpha = .8) +
+        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
+        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .7,
+                linetype ="dashed",
+                alpha = 0.8, color = "black",
+                se = F)
+  
+  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
+  
+
+    thisplot <- thisplot +
+      geom_vline(xintercept = ymd("2013-09-22"), color = "dark grey", lty = 2) +
+            geom_vline(xintercept = ymd("2017-09-24"), color = "dark grey", lty = 2) +
+      ylim(c(0,0.075))
+
+  
+  thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
+  
+  thisplot
+  
+    ggsave(str_c("plots/housing-agenda-", this_country,".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
+}
+
+```
+
+
+
+
+
+```{r script_eval}
+# Time needed to run script
+print(Sys.time() - start_time) 
+

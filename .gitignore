@@ -35,3 +35,14 @@ tables/.confusion-mat-ridge.tex.icloud
 *.icloud
 files/press.csv
 files/press.RData
+files/cross.RData
+files/multilingual-all_predictions.csv
+files/ridge_pred_all.RData
+publication/monthly_agendas.csv
+publication/monthly_agendas.RData
+publication/partypress.csv
+publication/partypress.RData
+publication/partypress_issues.csv
+publication/partypress_issues.RData
+publication/partypress_texts.csv
+publication/partypress_texts.RData

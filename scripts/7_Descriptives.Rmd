@@ -1,0 +1,214 @@
+---
+title: "Descriptives"
+author: "Cornelius Erfort"
+date: "11 Aug 2022"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, tidy.opts=list(width.cutoff = 80), tidy = T, python.reticulate = F)
+knitr::opts_knit$set(root.dir = dirname(getwd()))
+
+```
+
+
+# Setting up
+
+This script requires the files which are not included on GitHub.
+
+## Loading packages
+
+This script is based mainly on the functions of the quanteda package. For the cross-validation of the textmodels, quanteda.classifiers has to be loaded from GitHub.
+
+```{r packages, message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+start_time <- Sys.time()
+
+packages <- c(
+  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "quanteda.classifiers", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "openxlsx", "tools", "caret", "Seurat")
+
+lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
+
+invisible(lapply(packages, require, character.only = T))
+
+theme_update(text = element_text(family = "LM Roman 10")) # Set font family for ggplot
+
+# loadfonts()
+# loadfonts(device = "pdf")
+source("scripts/functions.R")
+
+seed <- 1621447882
+set.seed(seed)
+
+if(!dir.exists("files")) dir.create("files")
+
+```
+
+# Work in progress
+
+```{r}
+
+load("files/press.RData")
+
+press$str_length <- str_length(press$text)
+
+ggplot(press) +
+  geom_boxplot(aes(x = country %>% str_to_title() %>% str_replace("Uk", "UK"), y = str_length), outlier.shape = NA) + 
+  scale_y_continuous(limits = c(NA, 6000)) +
+  ylab("Character count per press release") + xlab("") +
+   theme(text = element_text(size = 14),
+         axis.text.x = element_text(angle = 15, hjust=1))
+ggsave(str_c("plots/word_count_boxplot.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
+
+```
+
+
+
+## Coverage
+
+```{r descriptives}
+
+# load("files/press.RData")
+
+table(press$year, press$party_name, press$country) %>% as.data.frame() %>% 
+  dplyr::rename(year = Var1, party = Var2, country = Var3, count = Freq) %>% filter(count > 0 & party != "Kukiz'15 (2015-2019)") %>% 
+  mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
+    ggplot() + 
+    geom_point(aes(x = year, y = party, size = count, color = count)) + 
+    facet_wrap(~country, nrow = 5, ncol = 2, scales = "free_y") + 
+  theme(text=element_text(family="LM Roman 10"))
+  ggsave("coverage_party_year.pdf", device = cairo_pdf, width = 10, height = 8*2^.5)
+  
+  
+  table(press$year, press$country) %>% as.data.frame() %>% 
+  dplyr::rename(year = Var1, country = Var2, count = Freq) %>% filter(count > 0) %>% 
+  mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
+    ggplot() + 
+    geom_point(aes(x = year, y = country, size = count)) +
+    scale_y_discrete(limits=rev) +
+    theme(text=element_text(family="LM Roman 10"),
+          axis.title = element_text(size = 15),
+          axis.text.y = element_text(size = 15),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 15),
+          legend.position = "bottom") +
+    xlab("") + ylab("")
+  
+  
+  ggsave("coverage_country_year.pdf", device = cairo_pdf, width = 5*2^.5, height = 5)
+
+
+
+```
+
+
+```{r}
+# Tables for samples of press releases
+# Immigration
+sample9 <- select(partypress, c("country", "party_name", "date", "header", "multi")) %>% filter(multi == 9)
+(sample9 <- sample9[sample(1:nrow(sample9), 20), ])
+
+sample9 %>% dplyr::rename(party = party_name, title = header) %>% select(-c(multi))
+
+
+latex_out <- capture.output(sample9 %>% dplyr::rename(party = party_name, title = header) %>% select(-c(multi)) %>%
+  stargazer(type = "latex", summary = F, rownames = F, 
+            title = "Sample of press releases classified as category 9 - Immigration", label = "tab:9-document-samples"))
+
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccc", "\\\\textwidth\\}\\{stX") %>% cat(sep = "\n"), file = "tables/9-document-samples.tex")
+
+```
+
+
+
+# Visualize issue agendas
+
+```{r}
+
+# Imm
+for (this_country in unique(issue_agendas$country) %>% sort) {
+
+  plot_data <- filter(issue_agendas, country == this_country & issue == 9)
+  
+  plot_data <- filter(plot_data, party_sum > 5)
+  
+  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+          axis.text.y = element_text(size = 14),
+          axis.title = element_text(size = 14),
+          text = element_text(size = 14)) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
+) +
+    ylab("Share of press releases per quarter") +
+    xlab("")
+  
+  thisplot <- thisplot +
+        geom_step(color = "dark grey", alpha = .8) +
+        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
+        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .7,
+                linetype ="dashed",
+                alpha = 0.8, color = "black",
+                se = F)
+  
+  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
+  
+
+    thisplot <- thisplot +
+      geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
+  
+  thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
+  
+  thisplot
+  
+    ggsave(str_c("plots/immigration-agenda-", this_country,".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
+}
+
+# Housing
+for (this_country in "germany" %>% sort) {
+
+  plot_data <- filter(issue_agendas, country == this_country & issue == 14)
+  
+  plot_data <- filter(plot_data, party_sum > 5)
+  
+  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+          axis.text.y = element_text(size = 14),
+          axis.title = element_text(size = 14),
+          text = element_text(size = 14)) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
+) +
+    ylab("Share of press releases per quarter") +
+    xlab("")
+  
+  thisplot <- thisplot +
+        geom_step(color = "dark grey", alpha = .8) +
+        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
+        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
+                size = .7,
+                linetype ="dashed",
+                alpha = 0.8, color = "black",
+                se = F)
+  
+  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
+  
+
+    thisplot <- thisplot +
+      geom_vline(xintercept = ymd("2013-09-22"), color = "dark grey", lty = 2) +
+            geom_vline(xintercept = ymd("2017-09-24"), color = "dark grey", lty = 2) +
+      ylim(c(0,0.075))
+
+  
+  thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
+  
+  thisplot
+  
+    ggsave(str_c("plots/housing-agenda-", this_country,".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
+}
+
+```
+

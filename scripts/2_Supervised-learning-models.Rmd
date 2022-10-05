@@ -70,7 +70,9 @@ presscorpus <- corpus(str_c(press$header, " ", press$text),
 
 if(!file.exists("files/tm_eval.RData")) load("files/tm_eval.RData") else tm_eval <- data.frame()
 
-for (country in press$country %>% unique) {
+# tm_eval <- filter(tm_eval, country != "poland")
+
+for (country in  "poland") { # press$country %>% unique) { #
   print(country)
   
   countrycorpus <-  presscorpus[presscorpus$country == country & presscorpus$cv_sample != -1, ]
@@ -277,84 +279,8 @@ for (country in press$country %>% unique) {
       }
      
 
-    ##############
-    #  6 Random forest
-    ##############
-    # model_name <- "Random forest"
-    # model_id <- model_id + 1
-    # print(model_name)
-    # print(model_id)
-    # if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) {
-    #   # Estimate model (100 trees)
-    #   eval_start <- Sys.time()
-    #   randomforest_eval <-  randomForest(x = as.matrix(dfm_subset(dfmat, dfmat$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))), y = as.factor(dfm_subset(dfmat, dfmat$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))$issue),
-    #                    xtest = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat, dfmat$cv_sample == 1)$issue),
-    #                    importance = T, mtry = 20, ntree = 100,
-    #                    keep.forest = T, type = "class")
-    #   eval_end <- Sys.time()
-    # 
-    # randomforest_pred <- predict(randomforest_eval, newdata = as.matrix(dfm_subset(dfmat, dfmat$cv_sample == 1)), type = "class")
-    # randomforest_test <- dfm_subset(dfmat, dfmat$cv_sample == 1)
-    # 
-    # 
-    #  model_eval <- data.frame(accuracy = accuracy(randomforest_pred, randomforest_test$issue),
-    #            time = as.numeric(eval_end - eval_start),
-    #            seed = seed,
-    #            weight = "uniform",
-    #            model_name = model_name,
-    #            model_id = model_id,
-    #            alpha = .5,
-    #            distribution = "multinomial",
-    #            country = country)
-    # 
-    #     add_param <- cbind(quanteda.classifiers::precision(randomforest_pred, randomforest_test$issue) %>% as.data.frame(),
-    #                        quanteda.classifiers::recall(randomforest_pred, randomforest_test$issue) %>% as.data.frame(),
-    #                        quanteda.classifiers::f1_score(randomforest_pred, randomforest_test$issue)  %>% as.data.frame() %>% mutate(class = rownames(.)))  %>% mutate(country = country)
-    # 
-    #  tm_eval <- merge(model_eval, add_param, by = "country") %>% rbind.fill(tm_eval)
-    # 
-    # }
-    # 
-    #   ## with alternative DFM
-    #   model_id <- model_id + 1
-    #   print(model_id)
-    # 
-    #   eval_start <- Sys.time()
-    #    if(!(str_c(country, model_id) %in% str_c(tm_eval$country, tm_eval$model_id))) {
-    #      randomforest_eval_alt <-  randomForest(x = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))), y = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample != 1 & (dfmat$issue %in% dfmat$issue[dfmat$cv_sample == 1]))$issue),
-    #                    xtest = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), ytest = as.factor(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)$issue),
-    #                    importance = T, mtry = 20, ntree = 100,
-    #                    keep.forest = T, type = "class")
-    #     eval_end <- Sys.time()
-    # 
-    # randomforest_pred_alt <- predict(randomforest_eval_alt, newdata = as.matrix(dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)), type = "class")
-    # randomforest_test_alt <- dfm_subset(dfmat_alt, dfmat_alt$cv_sample == 1)
-    # 
-    #   model_eval <- data.frame(accuracy = accuracy(randomforest_pred_alt, randomforest_test_alt$issue),
-    #            time = as.numeric(eval_end - eval_start),
-    #            seed = seed,
-    #            weight = "tfidf",
-    #            model_name = model_name,
-    #            model_id = model_id,
-    #            alpha = .5,
-    #            distribution = "multinomial",
-    #            country = country)
-    # 
-    #     add_param <- cbind(quanteda.classifiers::precision(randomforest_pred_alt, randomforest_test_alt$issue) %>% as.data.frame(),
-    #                        quanteda.classifiers::recall(randomforest_pred_alt, randomforest_test_alt$issue) %>% as.data.frame(),
-    #                        quanteda.classifiers::f1_score(randomforest_pred_alt, randomforest_test_alt$issue)  %>% as.data.frame() %>% mutate(class = rownames(.)))  %>% mutate(country = country)
-    # 
-    #  tm_eval <- merge(model_eval, add_param, by = "country") %>% rbind.fill(tm_eval)
-    # 
-    # }
-
-
-}
-
-# if(!dir.exists("files/supervised")) dir.create("files/supervised")
-
 save(tm_eval, file = "files/tm_eval.RData")
-
+}
 
 ```
 

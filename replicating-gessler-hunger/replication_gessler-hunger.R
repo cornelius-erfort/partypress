@@ -92,7 +92,7 @@ rrp <- c(50, # AT: FPÖ
          2253, # DE: AfD (not in Abou-Chadi because too new)
          1418, # DK: DF
          # ES
-         4365, # PL: KORWiN? + PiS
+         528, # PL: PiS? 
          # IE
          990, # NL: PvdV
          1546, # SE: SD
@@ -145,6 +145,7 @@ replication$asylum_z <- scale(replication$asylum, center = TRUE, scale = TRUE) %
 # 
 # replication <- merge(imm_salience_polls, parlgov, by = "parlgov_id", all.x = T)
 
+# not needed
 
 
 
@@ -152,7 +153,7 @@ replication$asylum_z <- scale(replication$asylum, center = TRUE, scale = TRUE) %
 # LAGS
 ###############
 
-
+# done in Stata
 
 
 
@@ -189,13 +190,13 @@ pub_salience$pub_salience_z <- scale(pub_salience$pub_salience, center = TRUE, s
 replication <- pub_salience %>% select(country, ym, pub_salience, pub_salience_z) %>% merge(replication, by = c("country", "ym"), all = T)
 
 
-# save(replication, file = "data/replication.RData")
+save(replication, file = "data/replication.RData")
 
 ###############
 # DEFINING CR PARTIES
 ###############
 
-
+# not needed
 
 
 ###############
@@ -204,6 +205,7 @@ replication <- pub_salience %>% select(country, ym, pub_salience, pub_salience_z
 
 # To delimit the crisis period, we additionally calculate a binary measure based on this series. We determine as refugee crisis the period in which the searches for the refugee topic are above the country average. Thereby, we place the start of the crisis in July 2015 in Austria, and in August 2015 in Germany and Switzerland. This period of heightened attention ends in July 2016 in Austria, in November 2016 in Germany, and in February 2017 in Switzerland, the first month in which attention to the topic falls below the mean.
 
+# not needed
 
 
 ###############
