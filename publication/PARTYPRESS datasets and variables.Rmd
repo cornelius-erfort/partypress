@@ -1,0 +1,147 @@
+---
+title: "PARTYPRESS datasets and variables"
+author: "Cornelius Erfort, Lukas F. Stoetzer, Heike Klüver"
+thanks: 'Research for this contribution is part of the Cluster of Excellence "Contestations of the Liberal Script" (EXC 2055, Project-ID: 390715649), funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany\textquotesingle s Excellence Strategy. We thank Leonie Fuchs, Paul Bochtler, Daniel Cruz, Johannes Lattmann, Felix Heimburger,  Violeta Haas and Tim Wappenhans for valuable research assistance. Replication material can be found on \texttt{\href{https://github.com/cornelius-erfort/scripts-issue-agendas}{https://github.com/cornelius-erfort/scripts-issue-agendas}.}\vspace{5mm}'
+date: "2022-10-05"
+output: 
+  pdf_document:
+    extra_dependencies: ["tabularx", "textcomp"]
+    toc: true
+    toc_depth: 1
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+\newpage
+# Main dataset PARTYPRESS
+
+Load files \path{partypress.csv} (52MB) or \path{partypress.RData} (10MB).
+
+### Variables
+\renewcommand{\arraystretch}{2}
+\begin{tabularx}{\textwidth}{llX}
+
+\textbf{Variable name} & \textbf{Format} & \textbf{Description} \\
+
+\hline
+
+\path{country_name}          &   [string]         &   Name of the country in small caps  \\
+\path{id}                    &   [integer]        &   Press release identifier, unique within \path{country_name}  \\
+\path{parlgov_id}            &   [integer]        &   Party ID (ParlGov) \\
+\path{party}                 &   [string]         &   Abbreviation of the party name (ParlGov) \\
+
+\hline
+
+\path{header}                &   [string]         &   Header of the press release in original language   \\
+\path{date}                  &   [date]         &   Issue date of the press release  \\
+\path{month}                 &   [yyyy-mm]      &   Issue month of the press release  \\
+\path{month_start}           &   [date]            &   Date of the first day of the month  \\
+\path{month_end}             &   [date]             &   Date of the last day of the month \\
+\path{week_start}            &   [date]             &   Date of previous Monday  \\
+\path{week_end}              &   [date]             &   Date of following Sunday \\
+\path{calendar_week}         &   [integer, 1-53]  &   Calendar week  \\
+
+\hline
+
+
+\path{issue_multi}           &   [integer, 1-23]        &   Issue category predicted from multilingual BERT using all labeled docs from all countries  \\
+\path{issue_ridge}           &   [integer, 1-23]        &   Issue category predicted from Ridge models, separate models by country \\
+\path{issue_coder}           &   [integer, 1-23]        &   Issue category hand coded by first or second country expert coder  \\
+\path{issue_coder2}          &  [integer, 1-23]         &   Issue category hand coded by second country expert coder, only for texts coded by both coders  \\
+
+\hline
+
+
+\path{position_coder}        &   [integer, 1-2]        &   Position of press release, hand coded by one country expert coder, 1 pro, 2 anti \\
+\path{position_coder2}       &   [integer, 1-2]        &   Position of press release, hand coded by 2nd country expert coder, only for texts coded by both coders, 1 pro, 2 anti \\
+\path{cv_sample}             &   [integer]         &   Folds used in cross validation, $k = 1,...,5$, not used: $-1$ \\
+
+
+\end{tabularx}
+
+
+\newpage
+# Issue names dataset PARTYPRESS ISSUES
+Load files \path{partypress_issues.csv} (1KB) or \path{partypress_issues.RData} (1KB).
+
+This dataset provides the issue category names for merging. Merge via one of the \path{issue_*} variables.
+
+
+
+### Variables
+\begin{tabularx}{\textwidth}{llX}
+
+\textbf{Variable name} & \textbf{Format} & \textbf{Description} \\
+
+\hline
+
+\path{issue}          &   [integer, 1-23]         &   Issue category code  \\
+\path{issue_name}                    &   [string]        &   Issue category description  \\
+
+
+\end{tabularx}
+
+
+\vfill
+
+# Raw texts dataset PARTYPRESS TEXTS
+Load files \path{partypress_issues.csv} (541MB) or \path{partypress_issues.RData} (189MB).
+
+This dataset provides the raw texts of all press releases. The headers are contained in the main dataset.
+We provide the texts separately because they use a lot of disk space but some users may not be interested in raw text. Merge via \path{country_name} + \path{id}.
+
+### Variables
+\begin{tabularx}{\textwidth}{llX}
+
+\textbf{Variable name} & \textbf{Format} & \textbf{Description} \\
+
+\hline
+
+\path{country_name}          &   [string]         &   Name of the country in small caps  \\
+\path{id}                    &   [integer]        &   Press release identifier, unique within \path{country_name}  \\
+\path{text}            &   [string]        &   Text of press releases in original language\\
+
+\end{tabularx}
+
+\vfill
+
+
+\newpage
+# Aggregated datasets MONTHLY and WEEKLY AGENDAS
+Load files \path{monthly_agendas.csv} (5MB)/\path{weekly_agendas.csv} (15MB) or \path{monthly_agendas.RData} (1MB)/\path{weekly_agendas.RData} (2MB).
+
+### Variables
+\begin{tabularx}{\textwidth}{llX}
+
+\textbf{Variable name} & \textbf{Format} & \textbf{Description} \\
+
+\hline
+
+\path{country_name}          &   [string]         &   Name of the country in small caps  \\
+\path{parlgov_id}            &   [integer]        &   Party ID (ParlGov) \\
+\path{party}                 &   [string]         &   Abbreviation of the party name (ParlGov) \\
+
+\hline
+
+\path{month_start}           &   [date]            &   Date of the first day of the month, only in \path{monthly_agendas}  \\
+\path{month_end}             &   [date]             &   Date of the last day of the month, only in \path{monthly_agendas} \\
+\path{week_start}            &   [date]             &   Date of previous Monday, only in \path{weekly_agendas}  \\
+\path{week_end}              &   [date]             &   Date of following Sunday, only in \path{weekly_agendas} \\
+
+\hline
+
+
+\path{issue_multi}           &   [integer]        &   Issue category predicted from multilingual BERT using all labeled docs from all countries \\
+\path{issue_descr}           &   [string]        &    Issue category description \\
+
+\hline
+
+
+\path{attention}        &   [numeric]        &   Share of press releases of category \path{issue_multi} of all \path{party_sum} \\
+\path{party_sum}       &   [integer]        &   Total number of press releases by this party in this month/week \\
+
+
+\end{tabularx}
