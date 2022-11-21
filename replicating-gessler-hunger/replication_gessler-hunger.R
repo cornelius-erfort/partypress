@@ -13,42 +13,46 @@ setwd("replicating-gessler-hunger")
 # SALIENCE
 ###############
 
-# Load the press releases data
-load("data/salience/alldocs_lab_notxt.RData")
-alldocs <- alldocs_lab_notxt
-rm(alldocs_lab_notxt)
-
-# Aggregate press releases monthly
-alldocs$month <- substr(alldocs$date, 1, 7)
-alldocs$n <- 1
-
-# Create dataframe with monthly issue attention
-imm_salience <- merge(aggregate(n ~ country + parlgov_id + month + issue_pred, alldocs, sum),
-                   aggregate(n ~ parlgov_id + month, alldocs, sum) %>% dplyr::rename(n_party = n),
-                   by = c("parlgov_id", "month"))
-imm_salience$imm_salience <- imm_salience$n/imm_salience$n_party * 100
-# imm_salience <- imm_salience %>% filter(country %in% c("germany", "austria"))
-imm_salience$ym <- substr(imm_salience$month, 3, 8)
-imm_salience <- select(imm_salience, -c(month))
-
-# # Add category 9 where it is missing but other categories exist
-add_obs <- unique(select(imm_salience, c(parlgov_id, country, ym)))
-add_obs$imm_salience <- 0
-add_obs$issue_pred <- 9
-
-existing_obs <- (imm_salience %>% filter(issue_pred == 9) %>% select(parlgov_id, ym))
-
-nrow(imm_salience)
-imm_salience <- rbind.fill(imm_salience, add_obs[!(str_c(add_obs$parlgov_id, add_obs$ym) %in% str_c(existing_obs$parlgov_id, existing_obs$ym)), ])
-nrow(imm_salience)
 
 
+# partypress <- readRDS("publication/rds/partypress.rds")
+monthly_agendas <- readRDS("../publication/rds/monthly_agendas.rds")
 
-# Make ready for merging with Gessler/Hunger
-imm_salience <- imm_salience %>% filter(issue_pred == 9) %>% select(-c(issue_pred, n, n_party))
+# # Load the press releases data
+# load("data/salience/alldocs_lab_notxt.RData")
+# alldocs <- alldocs_lab_notxt
+# rm(alldocs_lab_notxt)
+# 
+# # Aggregate press releases monthly
+# alldocs$month <- substr(alldocs$date, 1, 7)
+# alldocs$n <- 1
+# 
+# # Create dataframe with monthly issue attention
+# imm_salience <- merge(aggregate(n ~ country + parlgov_id + month + issue_pred, alldocs, sum),
+#                    aggregate(n ~ parlgov_id + month, alldocs, sum) %>% dplyr::rename(n_party = n),
+#                    by = c("parlgov_id", "month"))
+# 
+# 
+# imm_salience$imm_salience <- imm_salience$n/imm_salience$n_party * 100
+# # imm_salience <- imm_salience %>% filter(country %in% c("germany", "austria"))
+# imm_salience$ym <- substr(imm_salience$month, 3, 8)
+# imm_salience <- select(imm_salience, -c(month))
+# 
+# # # Add category 9 where it is missing but other categories exist
+# add_obs <- unique(select(imm_salience, c(parlgov_id, country, ym)))
+# add_obs$imm_salience <- 0
+# add_obs$issue_pred <- 9
+# 
+# existing_obs <- (imm_salience %>% filter(issue_pred == 9) %>% select(parlgov_id, ym))
+# 
+# nrow(imm_salience)
+# imm_salience <- rbind.fill(imm_salience, add_obs[!(str_c(add_obs$parlgov_id, add_obs$ym) %in% str_c(existing_obs$parlgov_id, existing_obs$ym)), ])
+# nrow(imm_salience)
 
+imm_salience <- monthly_agendas %>% filter(issue_multi == 9)
+imm_salience <- dplyr::rename(imm_salience, imm_salience = attention)
 
-imm_salience$country <- imm_salience$country %>% str_replace_all(c("austria" = "AT", 
+imm_salience$country <- imm_salience$country_name %>% str_replace_all(c("austria" = "AT", 
                                         "ireland" = "IE",
                                         "sweden" = "SE",
                                         "netherlands" = "NL",
@@ -57,7 +61,7 @@ imm_salience$country <- imm_salience$country %>% str_replace_all(c("austria" = "
                                         "germany" = "DE",
                                         "poland" = "PL",
                                         "spain" = "ES")) #%>% table(useNA = "always")
-
+imm_salience$ym <- str_c(substr(imm_salience$month, 3, 4), "-", substr(imm_salience$month, 5, 6))
 imm_salience[1:20, ]
 
 
@@ -72,7 +76,7 @@ polls <- readRDS("data/polls/polls.RDS") %>% mutate(polling = percent) %>%
   aggregate(polling ~ country + parlgov_id + party_name + ym, ., function(x) mean(x, na.rm = T))
 
 # Merge issue attention and polls
-replication <- merge(imm_salience, select(polls, -c(country)), all = T, by = c("parlgov_id", "ym"))
+replication <- merge(imm_salience, select(polls, -c(country, party_name)), all = T, by = c("parlgov_id", "ym"))
 
 # save(replication, file = "data/replication.RData")
 
@@ -89,7 +93,7 @@ listparty[order(listparty$country), ]
 
 
 rrp <- c(50, # AT: FPÖ
-         2253, # DE: AfD (not in Abou-Chadi because too new)
+         2253, # DE: AfD (not in Abou-Chadi because too new!?)
          1418, # DK: DF
          # ES
          528, # PL: PiS? 
@@ -167,21 +171,28 @@ replication$asylum_z <- scale(replication$asylum, center = TRUE, scale = TRUE) %
 # replication$pub_salience_z <- scale(replication$pub_salience_z, center = TRUE, scale = TRUE)
 
 
-pub_salience <- gtrends("Flüchtling", geo = c("DE", "AT"), time = "2010-01-01 2020-12-31")$interest_over_time
+pub_salience <- gtrends("Flüchtling", geo = "DE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time
 
-pub_salience <- gtrends("refugee", geo = c("IE"), time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
 
-pub_salience <- gtrends("refugee", geo = c("GB"), time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
+# gtrends("Flüchtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)
 
-pub_salience <- gtrends("vluchteling", geo = "NL", time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
+if(!("AT" %in% pub_salience$geo)) pub_salience <- gtrends("Flüchtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
-pub_salience <- gtrends("uchodźca", geo = "PL", time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
+if(!("IE" %in% pub_salience$geo)) pub_salience <- gtrends("refugee", geo = "IE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
-pub_salience <- gtrends("flygtning", geo = "DK", time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
+if(!("GB" %in% pub_salience$geo)) pub_salience <- gtrends("refugee", geo = "GB", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
-pub_salience <- gtrends("flykting", geo = "SE", time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
+if(!("NL" %in% pub_salience$geo)) pub_salience <- gtrends("vluchteling", geo = "NL", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
-pub_salience <- gtrends("refugiado", geo = "ES", time = "2010-01-01 2020-12-31")$interest_over_time %>% rbind.fill(pub_salience)
+if(!("PL" %in% pub_salience$geo)) pub_salience <- gtrends("uchodźca", geo = "PL", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+
+if(!("DK" %in% pub_salience$geo)) pub_salience <- gtrends("flygtning", geo = "DK", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+
+if(!("SE" %in% pub_salience$geo)) pub_salience <- gtrends("flykting", geo = "SE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+
+if(!("ES" %in% pub_salience$geo)) pub_salience <- gtrends("refugiado", geo = "ES", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+
+pub_salience$geo %>% table
 
 pub_salience <- pub_salience %>% mutate(pub_salience = hits %>% str_remove("<") %>% as.numeric, country = str_replace(geo, "GB", "UK"), ym = substr(date, 3, 7))
 
@@ -228,6 +239,9 @@ stata <- filter(stata, !(parlgov_id %in% rrp))
 
 stata <- stata[stata$party_name != "Kukiz'15 (2015-2019)", ]
 stata <- stata[!(stata$parlgov_id == 512 & stata$ym == "19-08"), ]
+
+stata$sal <- stata$sal*100
+stata$sal_rrp <- stata$sal_rrp*100
 
 
 stata$date <- ym(stata$ym)

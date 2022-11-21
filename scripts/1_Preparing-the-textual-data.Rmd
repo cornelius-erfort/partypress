@@ -247,6 +247,59 @@ for (country in press$country %>% unique) {
 
 }
 
+memory.limit(size=100000)
+
+# DFMs for the prediction of unlabeled docs
+for (country in press$country %>% unique) {
+  print(country)
+  
+  countrycorpus <-  presscorpus[presscorpus$country == country & presscorpus$cv_sample != -1, ]
+  
+    # Stopwords
+  if(country == "poland") countrystop <-  stopwords::stopwords("pl", source = "stopwords-iso") else countrystop <- stopwords(str_replace_all(country, c("germany" = "de", "austria" = "de", "spain" = "es", "netherlands" = "nl", "ireland" = "en", "uk" = "en", "sweden" = "sw", "denmark" = "da")))
+  countrystop
+  
+  dfmat_alt <- countrycorpus %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>%
+    dfm(remove = countrystop, # Stem and remove stopwords, punctuation etc.
+        stem = T, remove_punct = T, remove_number = T, remove_symbols = T, remove_url = T) %>% 
+    dfm_trim(max_docfreq = .06, # Remove words occurring >6% of docs
+             docfreq_ = "prop") %>%
+    dfm_trim(min_docfreq = 5, # Remove words occurring in <5 docs
+             docfreq_ = "count") %>% suppressWarnings()
+  
+  countrycorpus <-  presscorpus[presscorpus$country == country, ]
+  ndoc(countrycorpus) %>% print
+  
+
+  
+    if(!file.exists(str_c("files/all_dfmat_alt-", country, ".csv"))) {
+      # Create alternative dfm (bigrams and tfidf)
+  all_dfmat_alt <- countrycorpus %>%
+    tokens() %>% tokens_ngrams(n = 1:2) %>% dfm() %>% 
+    dfm_match(featnames(dfmat_alt)) %>% suppressWarnings()
+  
+    gc()
+  
+  # Save
+  # cbind(cv_sample = all_dfmat_alt$cv_sample, label = all_dfmat_alt$issue, convert(all_dfmat_alt, to = "data.frame"))[, -c(3)] %>% write.csv(str_c("files/all_dfmat_alt-", country, ".csv"), row.names = F)
+  str(dfmat_alt)
+  
+  # Export features
+  all_dfmat_alt@Dimnames$features[1:10]
+  
+  test <- all_dfmat_alt[1:10, ] %>% sparseMatrix
+  
+  test <- sparseMatrix(i = all_dfmat_alt@i, x = all_dfmat_alt@x, p = all_dfmat_alt@p, dims = all_dfmat_alt@Dim) #, dimnames = all_dfmat_alt@Dimnames)
+  
+  writeMM(test, file = "test.csr")
+  # cbind(cv_sample = all_dfmat_alt$cv_sample, label = all_dfmat_alt$issue, as.matrix(all_dfmat_alt))[, -c(3)] %>% write.csv(str_c("files/all_dfmat_alt-", country, ".csv"), row.names = F)
+
+      }
+  
+
+}
+
 ```
 
 

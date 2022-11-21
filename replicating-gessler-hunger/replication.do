@@ -110,17 +110,17 @@ label var noref_z "number of asylum applications"
 
 * combined model
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z, vce(robust) lags(2)
-outreg2 using model1a, ctitle(all) replace label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(all) replace label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * test for autocorrelation ************************************************************************
 estat abond
 
 
 * AT
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 1, vce(robust) lags(2)
-outreg2 using model1a, ctitle(AT) append  label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(AT) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * DE
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 2, vce(robust) lags(2)
-outreg2 using model1a, ctitle(DE) append  label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(DE) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 
 * CH
 *xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 3, vce(robust) lags(2)
@@ -128,7 +128,7 @@ outreg2 using model1a, ctitle(DE) append  label tex dec(2) pdec(2)
 
 * DK
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 4, vce(robust) lags(2)
-outreg2 using model1a, ctitle(DK) append  label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(DK) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * ES
 * xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 5, vce(robust) lags(2)
 * outreg2 using model1a, ctitle(ES) append  label tex dec(2) pdec(2) 
@@ -137,16 +137,18 @@ outreg2 using model1a, ctitle(DK) append  label tex dec(2) pdec(2)
 * outreg2 using model1a, ctitle(IE) append  label tex dec(2) pdec(2) 
 * NL
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 7, vce(robust) lags(2)
-outreg2 using model1a, ctitle(NL) append  label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(NL) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * PL
-*xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 8, vce(robust) lags(2)
-*outreg2 using model1a, ctitle(PL) append  label tex dec(2) pdec(2) 
+xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 8, vce(robust) lags(2)
+outreg2 using model1a, ctitle(PL) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * SE
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 9, vce(robust) lags(2)
-outreg2 using model1a, ctitle(SE) append  label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(SE) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * UK
 xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 10, vce(robust) lags(2)
-outreg2 using model1a, ctitle(UK) append  label tex dec(2) pdec(2) 
+outreg2 using model1a, ctitle(UK) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+
+
 
 
 
@@ -164,6 +166,33 @@ outreg2 using model1a, ctitle(after) append label tex dec(2) pdec(2)
 * center right
 xtabond sal sal_rrp L.sal_rrp CR CR_interac L.CR_interac noref_z polls_ppr refugees_z, vce(robust) lags(2)
 outreg2 using model1a, ctitle(center-right) append label tex dec(2) pdec(2) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

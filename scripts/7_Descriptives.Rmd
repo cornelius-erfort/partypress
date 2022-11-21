@@ -46,20 +46,50 @@ if(!dir.exists("files")) dir.create("files")
 
 ```
 
-# Work in progress
+
+
+```{r sources}
+load("files/press.RData")
+sources <- read.xlsx("data/sources.xlsx") %>% select(c(Country, Parlgov.Party.Code, Link.to.PR.start.page, Abbr.)) %>% filter(!(Abbr. %in% c("gruene_partei",
+"spoe_pressedienst",
+"fpoe_bundesparteileitung",
+"oevp_bundesparteileitung",
+"neos_bundesverband",
+"90gruene_bundesverband",
+"linke_bundesverband",
+"spd_bundesverband",
+"cdu_bundesverband",
+"csu_bundesverband"
+))) %>% dplyr::rename(country = Country, parlgov_id = Parlgov.Party.Code, url = Link.to.PR.start.page) %>% 
+  mutate(country = tolower(country))
+
+sources <- merge(unique(select(press, c(country, party, party_name))), sources, by.x = c("country", "party"), by.y = c("country", "Abbr."), all.x = T) %>% select(-c(party)) %>% mutate(country = str_to_title(country) %>% str_replace("Uk", "UK"))
+View(sources)
+
+stargazer(sources, summary = F)
+
+```
+
+# Word count box plot
 
 ```{r}
 
-load("files/press.RData")
+# load("files/press.RData")
+
+press <- readRDS("publication/rds/partypress.RDS")
+texts <- readRDS("publication/rds/partypress_texts.RDS")
+
+press <- merge(press, texts, by = c("country_name", "id"))
 
 press$str_length <- str_length(press$text)
 
 ggplot(press) +
-  geom_boxplot(aes(x = country %>% str_to_title() %>% str_replace("Uk", "UK"), y = str_length), outlier.shape = NA) + 
+  geom_boxplot(aes(x = country_name %>% str_to_title() %>% str_replace("Uk", "UK"), y = str_length), outlier.shape = NA) + 
   scale_y_continuous(limits = c(NA, 6000)) +
   ylab("Character count per press release") + xlab("") +
    theme(text = element_text(size = 14),
          axis.text.x = element_text(angle = 15, hjust=1))
+
 ggsave(str_c("plots/word_count_boxplot.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
 
 
@@ -73,17 +103,18 @@ ggsave(str_c("plots/word_count_boxplot.pdf"), device = cairo_pdf, width = 5*2^.5
 
 # load("files/press.RData")
 
-table(press$year, press$party_name, press$country) %>% as.data.frame() %>% 
+press$year <- substr(press$date, 1, 4)
+table(press$year, press$party, press$country_name) %>% as.data.frame() %>% 
   dplyr::rename(year = Var1, party = Var2, country = Var3, count = Freq) %>% filter(count > 0 & party != "Kukiz'15 (2015-2019)") %>% 
   mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
     ggplot() + 
     geom_point(aes(x = year, y = party, size = count, color = count)) + 
     facet_wrap(~country, nrow = 5, ncol = 2, scales = "free_y") + 
   theme(text=element_text(family="LM Roman 10"))
-  ggsave("coverage_party_year.pdf", device = cairo_pdf, width = 10, height = 8*2^.5)
+  ggsave("plots/coverage_party_year.pdf", device = cairo_pdf, width = 10, height = 8*2^.5)
   
   
-  table(press$year, press$country) %>% as.data.frame() %>% 
+  table(press$year, press$country_name) %>% as.data.frame() %>% 
   dplyr::rename(year = Var1, country = Var2, count = Freq) %>% filter(count > 0) %>% 
   mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
     ggplot() + 
@@ -97,7 +128,7 @@ table(press$year, press$party_name, press$country) %>% as.data.frame() %>%
     xlab("") + ylab("")
   
   
-  ggsave("coverage_country_year.pdf", device = cairo_pdf, width = 5*2^.5, height = 5)
+  ggsave("plots/coverage_country_year.pdf", device = cairo_pdf, width = 5*2^.5, height = 5)
 
 
 
@@ -107,13 +138,13 @@ table(press$year, press$party_name, press$country) %>% as.data.frame() %>%
 ```{r}
 # Tables for samples of press releases
 # Immigration
-sample9 <- select(partypress, c("country", "party_name", "date", "header", "multi")) %>% filter(multi == 9)
+sample9 <- select(partypress, c("country_name", "id", "party", "date", "header", "issue_multi")) %>% filter(issue_multi == 9) %>% mutate(country_name = country_name %>% str_to_title() %>% str_replace("Uk", "UK"))
 (sample9 <- sample9[sample(1:nrow(sample9), 20), ])
 
-sample9 %>% dplyr::rename(party = party_name, title = header) %>% select(-c(multi))
+sample9 %>% dplyr::rename(title = header) %>% select(-c(issue_multi))
 
 
-latex_out <- capture.output(sample9 %>% dplyr::rename(party = party_name, title = header) %>% select(-c(multi)) %>%
+latex_out <- capture.output(sample9 %>% dplyr::rename(title = header) %>% select(-c(issue_multi)) %>%
   stargazer(type = "latex", summary = F, rownames = F, 
             title = "Sample of press releases classified as category 9 - Immigration", label = "tab:9-document-samples"))
 
@@ -127,10 +158,14 @@ latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx"
 
 ```{r}
 
-# Imm
-for (this_country in unique(issue_agendas$country) %>% sort) {
 
-  plot_data <- filter(issue_agendas, country == this_country & issue == 9)
+issue_agendas <- readRDS("publication/rds/monthly_agendas.RDS")
+issue_agendas$date <- ymd(issue_agendas$month_start)
+# issue_agendas$attention <- issue_agendas$attention * 100
+# Imm
+for (this_country in unique(issue_agendas$country_name) %>% sort) {
+
+  plot_data <- filter(issue_agendas, country_name == this_country & issue_multi == 9)
   
   plot_data <- filter(plot_data, party_sum > 5)
   
@@ -167,48 +202,6 @@ for (this_country in unique(issue_agendas$country) %>% sort) {
 
 }
 
-# Housing
-for (this_country in "germany" %>% sort) {
-
-  plot_data <- filter(issue_agendas, country == this_country & issue == 14)
-  
-  plot_data <- filter(plot_data, party_sum > 5)
-  
-  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
-          axis.text.y = element_text(size = 14),
-          axis.title = element_text(size = 14),
-          text = element_text(size = 14)) +
-    scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(plot_data$date %>% min, plot_data$date %>% max)
-) +
-    ylab("Share of press releases per quarter") +
-    xlab("")
-  
-  thisplot <- thisplot +
-        geom_step(color = "dark grey", alpha = .8) +
-        #geom_smooth(method = "loess", formula = "y ~ x", color = "dark grey", lty = 2, se = F, alpha = .3)
-        geom_line(stat="smooth", method = "loess", formula = "y ~ x",
-                size = .7,
-                linetype ="dashed",
-                alpha = 0.8, color = "black",
-                se = F)
-  
-  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
-  
-
-    thisplot <- thisplot +
-      geom_vline(xintercept = ymd("2013-09-22"), color = "dark grey", lty = 2) +
-            geom_vline(xintercept = ymd("2017-09-24"), color = "dark grey", lty = 2) +
-      ylim(c(0,0.075))
-
-  
-  thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
-  
-  thisplot
-  
-    ggsave(str_c("plots/housing-agenda-", this_country,".pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
-
-}
 
 ```
 

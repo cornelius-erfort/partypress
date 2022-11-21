@@ -29,7 +29,8 @@ This script requires the files which are not included on GitHub.
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "ggrepel")
+  "quanteda", "quanteda.textmodels", "dplyr", "caret", "randomForest", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "reticulate", "doMC", "glmnet", "kableExtra", "stargazer", "extrafont", "ggrepel", "haven", "tidyr")
+
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -54,11 +55,11 @@ load("files/press.RData")
 
 ## Using the fine-tuned Transformers
 
-We trained the models using a set of more than 27,000 labeled documents, around 1500-2500  per country. In order to obtain aggregated measures of issue attention, we predict the issue categories of all ? labeled and unlabeled press releases in our sample.
+We trained the models using a set of more than 27,000 labeled documents, around 1500-2500  per country. In order to obtain aggregated measures of issue attention, we predict the issue categories of all labeled and unlabeled press releases in our sample.
 
 
 ```{r unlabeled}
-
+# Multilingual
 # Load the predicted labels
 multi_pred_all <- read_csv("files/multilingual-all_predictions.csv", col_names = F)
 multi_pred_all <- unique(multi_pred_all)
@@ -70,11 +71,32 @@ multi_pred_all <- merge(multi_pred_all, data.frame(multi = unique(press$issue) %
 
 partypress <- merge(press, multi_pred_all, by = c("country", "id"), all.x = T)
 
+partypress <- partypress %>% select(-c(party, party.y)) %>% dplyr::rename(party = party_name)
 
-save(partypress, file = "partypress.RData")
+# Monolingual
+mono_pred_all <- read_csv("files/monolingual-all_predictions.csv", col_names = F)
+mono_pred_all <- unique(mono_pred_all)
+names(mono_pred_all) <- c("country", "label", "id")
+mono_pred_all <- merge(mono_pred_all, data.frame(mono = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label", all.x = T) %>% select(-c(label))
 
+
+partypress <- merge(partypress, mono_pred_all, by = c("country", "id"), all.x = T)
+
+names(partypress)
+partypress <- partypress %>% select(-c(country.y)) 
+
+
+table(partypress$mono == partypress$multi)/nrow(partypress)
 
 ```
+# Add parlgov data
+
+```{r}
+parties <- read.csv("data/parlgov_view_party.csv", encoding = "UTF-8") %>% select(c(party_name_english, party_name, family_name, party_id)) %>% dplyr::rename(parlgov_id = party_id)
+
+partypress <- merge(partypress, parties, by = "parlgov_id", all.x = T)
+```
+
 
 
 # Adding labels based on country-specific Ridge models
@@ -122,36 +144,63 @@ for (country in partypress$country %>% unique) {
 
 ridge_pred_all <- ridge_pred_all %>% dplyr::rename(ridge = prediction)
 ridge_pred_all <- unique(ridge_pred_all)
-
 # select(ridge_pred_all)
 
 # ridge_pred_all <- dplyr::rename(ridge_pred_all, ridge = prediction)
 partypress <- merge(partypress, ridge_pred_all, by = c("country", "id"), all.x = T)
 
-# partypress <- filter(partypress, party_name != "Kukiz'15 (2015-2019)")
+
+## Add SuperLearner
+# Load the predicted labels
+super_pred_all <- read_csv("files/superlearner-all_predictions.csv", col_names = F)
+super_pred_all <- unique(super_pred_all)
+names(super_pred_all) <- c("country", "prediction", "label", "id")
+super_pred_all <- merge(super_pred_all, data.frame(super = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by.y = "label", by.x = "prediction", all.x = T) %>% select(-c(label, prediction))
+
+super_pred_all$super %>% table
+
+partypress <- merge(partypress, super_pred_all, by = c("country", "id"), all.x = T)
+
 partypress$party_name %>% table
 
-partypress$month <- as.character(partypress$date) %>% substr(1, 8) %>% str_c("15") %>% str_replace_all(c("-01-" = "-02-", "-03-" = "-02-", "-04-" = "-05-", "-06-" = "-05-", "-07-" = "-08-", "-09-" = "-08-", "-10-" = "-11-", "-12-" = "-11-")) %>%  ymd()
+
+table(partypress$issue_ridge == partypress$issue_multi)/nrow(partypress)
+table(partypress$issue_super == partypress$issue_multi)/nrow(partypress)
+
+
+
+partypress$month <- as.character(partypress$date) %>% substr(3, 8) %>% str_remove_all("-")
+
+partypress$month %>% unique %>% length
+
 partypress$month_start <- floor_date(partypress$date, "month")
 partypress$month_end <- ceiling_date(partypress$date, "month") - 1
-
+partypress$month_start %>% unique %>% length
 
 partypress$calendar_week <- week(partypress$date)
 
 partypress$week_start <- floor_date(partypress$date, "weeks", week_start = 1)
-partypress$week_end <- ceiling_date(partypress$date, "weeks", week_start = 7)
+partypress$week_end <- ceiling_date(partypress$date - 1, "weeks", week_start = 7)
 
 
-
-partypress <- select(partypress, c("country", "id", "parlgov_id", "party_name", "date", "month", "calendar_week", "week_start", "week_end", "header", "multi", "ridge", "issue", "issue_cross", "position", "position_cross", "cv_sample", "text")) %>% 
-  dplyr::rename(c(party = party_name,
-                  country_name = country,
+partypress <- select(partypress, c("country", "id", "parlgov_id", "party", "party_name", "party_name_english", "family_name", "date", "month", "month_start", "month_end", "calendar_week", "week_start", "week_end", "header", "multi", "mono", "ridge", "super", "issue", "issue_cross", "position", "position_cross", "cv_sample", "text")) %>% 
+  dplyr::rename(c(country_name = country,
                   issue_multi = multi,
+                  issue_mono = mono,
                   issue_ridge = ridge,
+                  issue_super = super,
                   issue = issue,
                   issue_coder2 = issue_cross,
                   position = position,
-                  position_coder2 = position_cross))
+                  position_coder2 = position_cross)) %>% 
+  mutate(issue_multi = issue_multi %>% as.numeric(),
+                  issue_mono = issue_mono %>% as.numeric(),
+                  issue_ridge = issue_ridge %>% as.character %>% as.numeric(),
+                  issue_super = issue_super %>% as.numeric(),
+                  issue = issue %>% as.numeric(),
+                  issue_coder2 = issue_coder2 %>% as.numeric(),
+                  position = position %>% as.numeric(),
+                  position_coder2 = position_coder2 %>% as.numeric())
 
 partypress_texts <- select(partypress, c("country_name", "id", "text"))
 
@@ -159,18 +208,23 @@ partypress_texts <- select(partypress, c("country_name", "id", "text"))
 # country_name
 # id (unique within country_name)
 # parlgov_id
-# (other codes?)
-# party
+# 
+# party - party abbreviation (parlgov)
+# party_name - party name (parlgov)
+# party_name_english - party name in English (parlgov)
+# family_name - party family name (parlgov)
 # date (format YYYY-MM-DD)
 # month (format YYYY-MM)
 # month_start
 # month_end
+# calendar_week (Calendar week: values 1-53)
 # week_start (date of previous Monday, format YYYY-MM-DD)
 # week_end (date of following Sunday, format YYYY-MM-DD)
-# calendar_week (Calendar week: values 1-53)
 # header
 # issue_multi (issue category predicted from multilingual BERT using all labeled docs from all countries)
+# issue_mono (issue category predicted from monolingugal BERT using only labeled docs from one country)
 # issue_ridge (issue category predicted from Ridge models, separate models by country)
+# issue_super (issue category predicted from SuperLearner models, separate models by country)
 # issue_coder (issue category hand coded by 1st OR 2nd country expert coder)
 # issue_coder2  (issue category hand coded by 2nd country expert coder, only for texts coded by both coders)
 
@@ -178,9 +232,19 @@ partypress_texts <- select(partypress, c("country_name", "id", "text"))
 # position_coder (position hand coded by 1st OR 2nd country expert coder)
 # position_coder2  (position category hand coded by 2nd country expert coder, only for texts coded by both coders)
 # cv_sample (used in cross validation of evaluation models, k = 1,2,3,4,5, not used: -1)
-partypress <- select(partypress, -c(text))
-save(partypress, file =  "publication/partypress.RData")
-write.csv(partypress, file = "publication/partypress.csv")
+
+
+
+
+# partypress <- select(partypress, -c(text))
+
+partypress <- select(partypress, c(country_name, id, parlgov_id, party, party_name, party_name_english, family_name, date, month, month_start, month_end, calendar_week, week_start, week_end,  header, issue_multi, issue_mono, issue_ridge, issue_super, issue, issue_coder2, position, position_coder2, cv_sample))
+
+partypress <- partypress[order(partypress$country_name, partypress$parlgov_id, partypress$date), ]
+
+saveRDS(partypress, file =  "publication/rds/partypress.RDS")
+write.csv(partypress, file = "publication/csv/partypress.csv", row.names = F, fileEncoding = "UTF-8")
+write_dta(partypress, path = "publication/dta/partypress.dta")
 
 # Issue category names for merging. Merge via issue_*
 # issue
@@ -192,8 +256,9 @@ partypress_issues <-
               "Social Welfare", "Housing", "Domestic Commerce", "Defense", "Technology", 
               "Foreign Trade", "International Affairs", "European Integration", "Government Operations", "Culture", "Non-thematic", "Other"))
 
-save(partypress_issues, file = "publication/partypress_issues.RData")
-write.csv(partypress_issues, file = "publication/partypress_issues.csv")
+saveRDS(partypress_issues, file = "publication/partypress_issues.RDS")
+write.csv(partypress_issues, file = "publication/partypress_issues.csv", row.names = F, fileEncoding = "UTF-8")
+write_dta(partypress_issues, path = "publication/partypress_issues.dta")
 
 # Texts separate because they use a lot of space but some users may not be interested in raw text. Merge via country_name + id
 # country_name
@@ -201,8 +266,9 @@ write.csv(partypress_issues, file = "publication/partypress_issues.csv")
 # text
 
 
-save(partypress_texts, file = "publication/partypress_texts.RData")
-write_csv(partypress_texts, file = "publication/partypress_texts.csv")
+saveRDS(partypress_texts, file = "publication/rds/partypress_texts.RDS")
+write.csv(partypress_texts, file = "publication/csv/partypress_texts.csv", row.names = F, fileEncoding = "UTF-8")
+# write_dta(partypress_texts, path = "publication/partypress_texts.dta") ## too large
 
 
 
@@ -218,42 +284,68 @@ To measure parties' evolving issue agendas, we aggregate the category counts ove
 ```{r monthly}
 
 # Create dataframe with only necessary vars
-monthly_agendas <- partypress %>% select(c(country_name, month_start, issue_multi, party, parlgov_id))
+monthly_agendas <- partypress %>% select(c(country_name, parlgov_id, party, party_name, party_name_english, family_name, month_start, month_end, issue_multi, issue_mono, issue_ridge, issue_super))
+
+# Reformat long
+monthly_agendas <- pivot_longer(monthly_agendas, starts_with("issue_"), names_to = "model", names_prefix = "issue_", values_to = "issue")
 
 # Add variable for counting
 monthly_agendas$freq <- 1
 
 # Aggregate by party, date and issue
-monthly_agendas <- aggregate(freq ~ country_name + party + parlgov_id + month_start + issue_multi, monthly_agendas, sum)
+monthly_agendas <- aggregate(freq ~ country_name + parlgov_id + party + party_name + party_name_english + family_name + month_start + month_end + model + issue, monthly_agendas, sum)
 
-# Add observations with zero documents
-for (thisparty in unique(monthly_agendas$parlgov_id)) {
-  for(thismonth in unique(monthly_agendas$month_start[monthly_agendas$parlgov_id == thisparty])) {
-    for(thisissue in unique(monthly_agendas$issue_multi)) {
-      if(nrow(monthly_agendas[monthly_agendas$parlgov_id == thisparty & monthly_agendas$month_start == thismonth & monthly_agendas$issue_multi == thisissue, ]) == 0 & nrow(monthly_agendas[monthly_agendas$parlgov_id == thisparty & monthly_agendas$month_start == thismonth, ]) != 0) {
-        monthly_agendas <- data.frame(
-          parlgov_id = thisparty, month_start = thismonth, issue_multi = thisissue, freq = 0
-          ) %>% rbind.fill(monthly_agendas)
-}}}}
+expand_agendas <- expand.grid(parlgov_id = unique(monthly_agendas$parlgov_id), month_start = as.Date(unique(monthly_agendas$month_start), origin = "1970-01-01"), issue = unique(monthly_agendas$issue),  model = unique(monthly_agendas$model))
+
+monthly_agendas <- merge(monthly_agendas, expand_agendas, by = c("parlgov_id", "month_start", "issue", "model"), all = T)
+monthly_agendas <- monthly_agendas %>% dplyr::group_by(parlgov_id, month_start) %>% dplyr::mutate(party_sum = sum(freq, na.rm = T)) %>% filter(party_sum > 0) 
+
 
 # Add var for total press releases per party and month
-monthly_agendas$party_sum <- ave(monthly_agendas$freq, monthly_agendas$month_start, monthly_agendas$parlgov_id, FUN = sum)
+monthly_agendas$freq[is.na(monthly_agendas$freq)] <- 0
+monthly_agendas$share <- monthly_agendas$freq / monthly_agendas$party_sum
 
-monthly_agendas$attention <- monthly_agendas$freq / monthly_agendas$party_sum
+summary(monthly_agendas$share)
+hist(monthly_agendas$share)
+
+monthly_agendas$issue <- monthly_agendas$issue %>% as.numeric()
 
 monthly_agendas$issue %>% table
 
 # Add issue descriptions
+monthly_agendas <- merge(monthly_agendas, issue_categories, by = "issue") %>% select(-c(freq))
 
-monthly_agendas <- merge(monthly_agendas, issue_categories, by.x = "issue_multi", by.y = "issue") %>% select(-c(freq))
+# Fill vars
+monthly_agendas <- monthly_agendas %>% dplyr::group_by(parlgov_id) %>% do(fill(., country_name, party, party_name, party_name_english, family_name))
 
 
-monthly_agendas <- monthly_agendas %>% group_by(parlgov_id) %>% fill(country_name, party)
+monthly_agendas$party_name %>% table
 
-# monthly_agendas$date <- monthly_agendas$date %>% as.Date(origin = "1970-01-01")
+monthly_agendas$month_end <- ceiling_date(monthly_agendas$month_start, "month") - 1
 
-save(monthly_agendas, file = "publication/monthly_agendas.RData")
-write.csv(monthly_agendas, "publication/monthly_agendas.csv")
+monthly_agendas$month_start <- monthly_agendas$month_start %>% as.Date(origin = "1970-01-01")
+
+monthly_agendas$month <- monthly_agendas$month_start %>% substr(1,7) %>% str_remove("-")
+
+monthly_agendas <- select(monthly_agendas, c(country_name, parlgov_id, party, party_name, party_name_english, family_name, month, month_start, month_end, issue, model, issue_descr, share, party_sum))
+
+# Reformat wide
+monthly_agendas <- pivot_wider(monthly_agendas, names_from = "model", names_prefix = "share_", values_from = "share")
+
+# monthly_agendas <- as.data.frame(monthly_agendas)
+
+
+
+monthly_agendas <- monthly_agendas[order(monthly_agendas$country_name, monthly_agendas$parlgov_id, monthly_agendas$month_start, monthly_agendas$issue), ]
+
+monthly_agendas <- as.data.frame(monthly_agendas)
+
+saveRDS(monthly_agendas, file = "publication/rds/monthly_agendas.RDS")
+write.csv(monthly_agendas, "publication/csv/monthly_agendas.csv", row.names = F, fileEncoding = "UTF-8")
+write_dta(monthly_agendas, path = "publication/dta/monthly_agendas.dta")
+
+corrgram(select(monthly_agendas, starts_with("share")), upper.panel = panel.cor)
+
 
 ```
 
@@ -262,52 +354,76 @@ write.csv(monthly_agendas, "publication/monthly_agendas.csv")
 ```{r weekly}
 
 # Create dataframe with only necessary vars
-weekly_agendas <- partypress %>% select(c(country_name, week_start, issue_multi, party, parlgov_id))
+weekly_agendas <- partypress %>% select(c(country_name, parlgov_id, party, party_name, party_name_english, family_name, week_start, week_end, issue_multi, issue_mono, issue_ridge, issue_super))
+
+# Reformat long
+weekly_agendas <- pivot_longer(weekly_agendas, starts_with("issue_"), names_to = "model", names_prefix = "issue_", values_to = "issue")
 
 # Add variable for counting
 weekly_agendas$freq <- 1
 
 # Aggregate by party, date and issue
-weekly_agendas <- aggregate(freq ~ country_name + party + parlgov_id + week_start + issue_multi, weekly_agendas, sum)
+weekly_agendas <- aggregate(freq ~ country_name + parlgov_id + party + party_name + party_name_english + family_name + week_start + week_end + issue + model, weekly_agendas, sum)
 
-# Add observations with zero documents
-# for (thisparty in unique(weekly_agendas$parlgov_id)) {
-#   for(thisweek in unique(weekly_agendas$week_start[weekly_agendas$parlgov_id == thisparty])) {
-#     for(thisissue in unique(weekly_agendas$issue_multi)) {
-#       if(nrow(weekly_agendas[weekly_agendas$parlgov_id == thisparty & weekly_agendas$week_start == thisweek & weekly_agendas$issue_multi == thisissue, ]) == 0 & nrow(weekly_agendas[weekly_agendas$parlgov_id == thisparty & weekly_agendas$week_start == thisweek, ]) != 0) {
-#         weekly_agendas <- data.frame(
-#           parlgov_id = thisparty, week_start = thisweek, issue_multi = thisissue, freq = 0
-#           ) %>% rbind.fill(weekly_agendas)
-#       }}}}
+expand_agendas <- expand.grid(parlgov_id = unique(weekly_agendas$parlgov_id), week_start = as.Date(unique(weekly_agendas$week_start), origin = "1970-01-01"), issue = unique(weekly_agendas$issue), model = unique(weekly_agendas$model))
 
-expand_agendas <- expand.grid(parlgov_id = unique(weekly_agendas$parlgov_id), week_start = as.Date(unique(weekly_agendas$week_start), origin = "1970-01-01"), issue_multi = unique(weekly_agendas$issue_multi))
-# test$freq_zero <- 0
+weekly_agendas <- merge(weekly_agendas, expand_agendas, by = c("parlgov_id", "week_start", "issue", "model"), all = T)
 
-weekly_agendas <- merge(weekly_agendas, expand_agendas, by = c("parlgov_id", "week_start", "issue_multi"), all = T)
-# weekly_agendas$freq %>% is.na %>% table
 weekly_agendas <- weekly_agendas %>% dplyr::group_by(parlgov_id, week_start) %>% dplyr::mutate(party_sum = sum(freq, na.rm = T)) %>% filter(party_sum > 0) 
 
+# weekly_agendas[duplicated(select(weekly_agendas, c(parlgov_id, week_start, issue, model))) | duplicated(select(weekly_agendas, c(parlgov_id, week_start, issue, model)), fromLast = T), ] %>% View
+
+
+
 # Add var for total press releases per party and month
-# weekly_agendas$party_sum <- ave(weekly_agendas$freq, weekly_agendas$week_start, weekly_agendas$parlgov_id, FUN = sum)
 weekly_agendas$freq[is.na(weekly_agendas$freq)] <- 0
-weekly_agendas$attention <- weekly_agendas$freq / weekly_agendas$party_sum
+weekly_agendas$share <- weekly_agendas$freq / weekly_agendas$party_sum
 
-summary(weekly_agendas$attention)
-hist(weekly_agendas$attention)
+summary(weekly_agendas$share)
+hist(weekly_agendas$share)
 
-# weekly_agendas$issue_multi %>% table
+weekly_agendas$issue <- weekly_agendas$issue %>% as.numeric()
+
+# weekly_agendas$issue %>% table
 
 # Add issue descriptions
-weekly_agendas <- weekly_agendas %>% group_by(parlgov_id) %>% fill(country_name, party)
+weekly_agendas <- merge(weekly_agendas, issue_categories, by = "issue") %>% select(-c(freq))
 
-weekly_agendas <- merge(weekly_agendas, issue_categories, by.x = "issue_multi", by.y = "issue") %>% select(-c(freq))
+# Fill vars
+weekly_agendas <- weekly_agendas[order(weekly_agendas$country_name, weekly_agendas$parlgov_id, weekly_agendas$week_start, weekly_agendas$issue), ]
+
+weekly_agendas <- weekly_agendas %>% group_by(parlgov_id) %>% tidyr::fill(country_name, party, party_name, party_name_english, family_name)
+
+weekly_agendas$week_end <- ceiling_date(weekly_agendas$week_start, "week")
+
+weekly_agendas$week_start <- weekly_agendas$week_start %>% as.Date(origin = "1970-01-01")
+
+weekly_agendas$calendar_week <- week(weekly_agendas$week_start)
+
+
+weekly_agendas <- select(weekly_agendas, c(country_name, parlgov_id, party, party_name, party_name_english, family_name, calendar_week, week_start, week_end, issue, model, issue_descr, share, party_sum))
+
+weekly_agendas <- unique(weekly_agendas)
+
+# weekly_agendas[select(weekly_agendas, c(parlgov_id, week_start, issue, model)) %>% duplicated, ] %>% View
+
+# Reformat wide
+weekly_agendas <- pivot_wider(weekly_agendas, names_from = "model", names_prefix = "share_", values_from = "share")
+
+
+weekly_agendas <- weekly_agendas[order(weekly_agendas$country_name, weekly_agendas$parlgov_id, weekly_agendas$week_start, weekly_agendas$issue), ]
 
 # weekly_agendas$date <- weekly_agendas$date %>% as.Date(origin = "1970-01-01")
 
-save(weekly_agendas, file = "publication/weekly_agendas.RData")
-write.csv(weekly_agendas, "publication/weekly_agendas.csv")
+saveRDS(weekly_agendas, file = "publication/rds/weekly_agendas.RDS")
+write.csv(weekly_agendas, "publication/csv/weekly_agendas.csv", row.names = F, fileEncoding = "UTF-8")
+write_dta(weekly_agendas, path = "publication/dta/weekly_agendas.dta")
+
+
+corrgram(select(weekly_agendas, starts_with("share")), upper.panel = panel.cor)
 
 ```
+
 
 
 

@@ -89,17 +89,17 @@ head(multi_pred)
 # Aggregate evaluation
 
 # Human coders
-load("files/cross.RData")
-cross_agg <- merge(table(cross$issue) / nrow(cross), table(cross$issue_cross) / nrow(cross), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
-  dplyr::mutate(model = "Intercoder", n = nrow(cross))
-cross_agg <- cross_agg[order(cross_agg$Issue), ]
+# load("files/cross.RData")
+# cross_agg <- merge(table(cross$issue) / nrow(cross), table(cross$issue_cross) / nrow(cross), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
+#   dplyr::mutate(model = "Intercoder", n = nrow(cross))
+# cross_agg <- cross_agg[order(cross_agg$Issue), ]
 # cross_agg <- merge(cross_agg, categories, by.x = "Issue", by.y = "issue")
 # cross_agg$Issue <- str_c(cross_agg$Issue, " - ", cross_agg$title)
 
 
 # Transformers multilingual
 load("files/multi_pred.RData")
-multi_pred <- multi_pred[sample(1:nrow(multi_pred), nrow(cross)), ]
+# multi_pred <- multi_pred[sample(1:nrow(multi_pred), nrow(cross)), ]
 multi_agg <- merge(table(multi_pred$issue) / nrow(multi_pred), table(multi_pred$prediction) / nrow(multi_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
   dplyr::mutate(model = "Multilingual Transformer", n = nrow(multi_pred))
 multi_agg <- multi_agg[order(multi_agg$Issue), ]
@@ -108,7 +108,7 @@ multi_agg <- multi_agg[order(multi_agg$Issue), ]
 # multi_pred <- merge(multi_pred, categories, by.x = "Issue", by.y = "issue")
 
 
-agg_eval <- rbind.fill(multi_agg, cross_agg)
+agg_eval <- multi_agg # rbind.fill(multi_agg, cross_agg)
 
 
 # Transformer monolingual
@@ -122,7 +122,7 @@ if(file.exists("files/mono_pred.RData"))  load("files/mono_pred.RData") else {
   mono_pred$prediction <- str_replace_all(mono_pred$prediction, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
   save(mono_pred, file = "files/mono_pred.RData")
 }
-mono_pred <- mono_pred[sample(1:nrow(mono_pred), nrow(cross)), ]
+# mono_pred <- mono_pred[sample(1:nrow(mono_pred), nrow(cross)), ]
 
 
 mono_agg <- merge(table(mono_pred$issue) / nrow(mono_pred), table(mono_pred$prediction) / nrow(mono_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% dplyr::mutate(model = "Monolingual Transformer", n = nrow(mono_pred))
@@ -133,7 +133,7 @@ agg_eval <- rbind.fill(agg_eval, mono_agg)
 
 # Ridge (L2)
 load("files/ridge-pred.RData")
-ridge_pred <- ridge_pred[sample(1:nrow(ridge_pred), nrow(cross)), ]
+# ridge_pred <- ridge_pred[sample(1:nrow(ridge_pred), nrow(cross)), ]
 ridge_agg <- merge(table(ridge_pred$issue) / nrow(multi_pred), table(ridge_pred$prediction) / nrow(ridge_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
   dplyr::mutate(model = "Ridge (L2)", n = nrow(ridge_pred))
 ridge_agg <- ridge_agg[order(ridge_agg$Issue), ]
@@ -144,6 +144,8 @@ agg_eval <- rbind.fill(agg_eval, ridge_agg)
 
 agg_eval <- merge(agg_eval, categories, by.x = "Issue", by.y = "issue")
 
+
+agg_eval %>% dplyr::group_by(model) %>% dplyr::summarise(sum = sum(n))
 
 
 # Difference in percentage points (positive values indicate an inflated prediction, i.e. we estimate a higher share for the category compared to the truth)
