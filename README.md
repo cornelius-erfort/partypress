@@ -9,7 +9,7 @@ The entire dataset of press releases is not published here.
 
 The following figure shows an example for the measurement of the immigration agendas of German parties.
 
-*Issue attention of German parties to the environment
+*Issue attention of German parties to the environment <br>
 <img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/immigration-agenda-germany.png" width="60%">
 
 
