@@ -89,17 +89,16 @@ head(multi_pred)
 # Aggregate evaluation
 
 # Human coders
-# load("files/cross.RData")
-# cross_agg <- merge(table(cross$issue) / nrow(cross), table(cross$issue_cross) / nrow(cross), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
-#   dplyr::mutate(model = "Intercoder", n = nrow(cross))
-# cross_agg <- cross_agg[order(cross_agg$Issue), ]
-# cross_agg <- merge(cross_agg, categories, by.x = "Issue", by.y = "issue")
+load("files/cross.RData")
+cross_agg <- merge(table(cross$issue) / nrow(cross), table(cross$issue_cross) / nrow(cross), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>%
+  dplyr::mutate(model = "Intercoder", n = nrow(cross))
+cross_agg <- cross_agg[order(cross_agg$Issue), ]
+cross_agg <- merge(cross_agg, categories, by.x = "Issue", by.y = "issue")
 # cross_agg$Issue <- str_c(cross_agg$Issue, " - ", cross_agg$title)
-
 
 # Transformers multilingual
 load("files/multi_pred.RData")
-# multi_pred <- multi_pred[sample(1:nrow(multi_pred), nrow(cross)), ]
+multi_pred <- multi_pred[sample(1:nrow(multi_pred), nrow(cross)), ]
 multi_agg <- merge(table(multi_pred$issue) / nrow(multi_pred), table(multi_pred$prediction) / nrow(multi_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
   dplyr::mutate(model = "Multilingual Transformer", n = nrow(multi_pred))
 multi_agg <- multi_agg[order(multi_agg$Issue), ]
@@ -108,22 +107,13 @@ multi_agg <- multi_agg[order(multi_agg$Issue), ]
 # multi_pred <- merge(multi_pred, categories, by.x = "Issue", by.y = "issue")
 
 
-agg_eval <- multi_agg # rbind.fill(multi_agg, cross_agg)
+agg_eval <- rbind.fill(multi_agg, cross_agg)
 
 
 # Transformer monolingual
 
-if(file.exists("files/mono_pred.RData"))  load("files/mono_pred.RData") else {
-  mono_pred <- read_csv("files/monolingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id")) %>% dplyr::rename("pred_label" = "prediction") %>% 
-  merge(., data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label)) %>% 
-  merge(., data.frame(prediction = unique(press$issue) %>% sort, pred_label = (1:length(unique(press$issue) %>% sort) - 1)), by = "pred_label") %>% select(-c(pred_label))
-  mono_pred$issue %>% table
-  mono_pred$issue <- str_replace_all(mono_pred$issue, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-  mono_pred$prediction <- str_replace_all(mono_pred$prediction, c("191" = "19.1", "192" = "19.2")) %>% factor(levels = c(1:10, 12:18, 19.1, 19.2, 20, 23, 98, 99))
-  save(mono_pred, file = "files/mono_pred.RData")
-}
-# mono_pred <- mono_pred[sample(1:nrow(mono_pred), nrow(cross)), ]
-
+load("files/mono_pred.RData") 
+mono_pred <- mono_pred[sample(1:nrow(mono_pred), nrow(cross)), ]
 
 mono_agg <- merge(table(mono_pred$issue) / nrow(mono_pred), table(mono_pred$prediction) / nrow(mono_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% dplyr::mutate(model = "Monolingual Transformer", n = nrow(mono_pred))
 mono_agg <- mono_agg[order(mono_agg$Issue), ]
@@ -133,7 +123,8 @@ agg_eval <- rbind.fill(agg_eval, mono_agg)
 
 # Ridge (L2)
 load("files/ridge-pred.RData")
-# ridge_pred <- ridge_pred[sample(1:nrow(ridge_pred), nrow(cross)), ]
+ridge_pred <- ridge_pred[sample(1:nrow(ridge_pred), nrow(cross)), ]
+
 ridge_agg <- merge(table(ridge_pred$issue) / nrow(multi_pred), table(ridge_pred$prediction) / nrow(ridge_pred), by = "Var1") %>% dplyr::rename(Issue = Var1, Truth = Freq.x, Prediction = Freq.y) %>% 
   dplyr::mutate(model = "Ridge (L2)", n = nrow(ridge_pred))
 ridge_agg <- ridge_agg[order(ridge_agg$Issue), ]
@@ -153,8 +144,8 @@ agg_eval$Difference <- agg_eval$Prediction - agg_eval$Truth
 # two_agg[, c("Truth", "Prediction", "Difference")] <- apply(two_agg[, c("Truth", "Prediction", "Difference")], MARGIN = 2, function (x) round(x, 3)) # Round
 
 # MSE
-mse <- agg_eval %>% group_by(model) %>% dplyr::summarise(MSE = sum((Difference*100)^2)/n(), 
-                                                  RMSE = (sum((Difference*100)^2)/n())^.5, n = mean(n)) %>% arrange(MSE)
+mse <- agg_eval %>% group_by(model) %>% dplyr::summarise(MSE = (sum((Difference*100)^2)/n()) %>% round(3), 
+                                                  RMSE = (sum((Difference*100)^2)/n())^.5 %>% round(3), n = mean(n)) %>% arrange(MSE)
 
 
 latex_out <- capture.output(mse %>%

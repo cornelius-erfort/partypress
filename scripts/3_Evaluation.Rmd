@@ -43,6 +43,9 @@ if(!dir.exists("supervised-files")) dir.create("supervised-files")
 source("scripts/functions.R")
 
 load("files/press.RData")
+labels <- filter(press, cv_sample > 0) %>% select(c(country, id, label))
+labels <- merge(labels, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label")
+# labels$issue
 
 ```
 
@@ -57,7 +60,20 @@ load("files/tm_eval.RData")
 # Add SuperLearner models
 
 ```{r transformer}
-super_pred <- read.csv("files/superlearner-prediction.csv", header = F, col.names = c("country", "cv_sample", "weight", "issue", "prediction"))
+
+tm_eval$model_name %>% table
+
+
+# tm_eval <- filter(tm_eval, !(model_name %in% c("SuperLearner", "Monolingual Transformer", "Multilingual Transformer")))
+
+super_pred <- read.csv("files/superlearner-prediction.csv", header = F, col.names = c("country", "cv_sample", "weight", "label", "id"))
+super_pred <- merge(super_pred, data.frame(prediction = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>%
+  select(-c(label))
+
+super_pred <- merge(labels, super_pred, by = c("country", "id"))
+
+save(super_pred, file = "files/super_pred.RData")
+
 
 super_eval <- super_pred %>% dplyr::group_by(country, cv_sample, weight) %>% dplyr::summarise(precision = quanteda.classifiers::precision(prediction, issue, by_class = T)) %>%  unnest_wider(precision) %>% pivot_longer(cols = unique(super_pred$issue) %>% as.character(), names_to = "issue", values_to = "precision")  %>% 
   merge(super_pred %>% dplyr::group_by(country, cv_sample, weight) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = T)), by = c("country", "cv_sample", "weight"))
@@ -93,16 +109,25 @@ tm_eval <- rbind.fill(tm_eval, super_eval)
 # tm_eval <- filter(tm_eval, model_id < 11)
 
 # Monolingual
-mono_pred <- read.csv("files/monolingual-prediction.csv", header = F, col.names = c("country", "cv_sample", "label", "prediction", "id"))
+mono_pred <- read.csv("files/monolingual-prediction.csv", header = F, col.names = c("country", "cv_sample", "label", "id"))
 
-mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(precision = quanteda.classifiers::precision(prediction, label, by_class = T)) %>%  unnest_wider(precision) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "precision")  %>% 
-  merge(mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, label, by_class = T)), by = c("country", "cv_sample"))
+mono_pred <- merge(mono_pred, data.frame(prediction = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>%
+  select(-c(label))
+
+mono_pred <- merge(labels, mono_pred, by = c("country", "id"))
+
+table(mono_pred$issue == mono_pred$prediction)
+
+save(mono_pred, file = "files/mono_pred.RData")
+
+mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(precision = quanteda.classifiers::precision(prediction, issue, by_class = T)) %>%  unnest_wider(precision) %>% pivot_longer(cols = unique(mono_pred$issue) %>% as.character(), names_to = "issue", values_to = "precision")  %>% 
+  merge(mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = T)), by = c("country", "cv_sample"))
                                                                                 
-mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(recall = quanteda.classifiers::recall(prediction, label, by_class = T)) %>%  unnest_wider(recall) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "recall")  %>% merge(mono_eval, by = c("country", "cv_sample", "label"))
+mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(recall = quanteda.classifiers::recall(prediction, issue, by_class = T)) %>%  unnest_wider(recall) %>% pivot_longer(cols = unique(mono_pred$issue) %>% as.character(), names_to = "issue", values_to = "recall")  %>% merge(mono_eval, by = c("country", "cv_sample", "issue"))
 
-mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, label, by_class = T)) %>%  unnest_wider(f1) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "f1")  %>% merge(mono_eval, by = c("country", "cv_sample", "label"))
+mono_eval <- mono_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, issue, by_class = T)) %>%  unnest_wider(f1) %>% pivot_longer(cols = unique(mono_pred$issue) %>% as.character(), names_to = "issue", values_to = "f1")  %>% merge(mono_eval, by = c("country", "cv_sample", "issue"))
 
-mono_eval <- merge(mono_eval, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label))
+# mono_eval <- merge(mono_eval, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "issue") %>% select(-c(label))
 
 mono_times <- read.csv("files/monolingual-times.csv", header = F, col.names = c("time", "cv_sample", "country"))
 mono_times$time <- mono_times$time/60
@@ -114,35 +139,42 @@ mono_eval$model_id <- 13
 
 mono_eval <- mono_eval %>% dplyr::rename("k" = "cv_sample", "class" = "issue")
 
+mono_eval$accuracy %>% unlist %>% mean
+
 tm_eval <- rbind.fill(tm_eval, mono_eval)
 
 # Multilingual
-multi_pred <- read.csv("files/multilingual-prediction.csv", header = F, col.names = c("country", "cv_sample", "label", "prediction", "id"))
+multi_pred <- read.csv("files/multilingual-prediction.csv", header = F, col.names = c("country", "cv_sample", "label", "id"))
 
+multi_pred <- merge(multi_pred, data.frame(prediction = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>%
+  select(-c(label))
+
+multi_pred <- merge(labels, multi_pred, by = c("country", "id"))
+save(multi_pred, file = "files/multi_pred.RData")
 # multi_eval <- multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy_issue = quanteda.classifiers::accuracy(prediction, label, by_class = T)) %>%  unnest_wider(accuracy_issue) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "precision")  %>%
   # merge(multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy_issue = quanteda.classifiers::accuracy(prediction, label, by_class = T)), by = c("country", "cv_sample"))
                                                     
 
 multi_eval <- multi_pred %>% 
   dplyr::group_by(country, cv_sample) %>% 
-  dplyr::summarise(precision = quanteda.classifiers::precision(prediction, label, by_class = T)) %>%  
-  unnest_wider(precision) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "precision")  %>%
-  merge(multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, label, by_class = T)), by = c("country", "cv_sample"))
+  dplyr::summarise(precision = quanteda.classifiers::precision(prediction, issue, by_class = T)) %>%  
+  unnest_wider(precision) %>% pivot_longer(cols = unique(multi_pred$issue) %>% as.character(), names_to = "issue", values_to = "precision")  %>%
+  merge(multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = T)), by = c("country", "cv_sample"))
                         
 
-multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, label, by_class = T))
+# multi_pred %>% dplyr::group_by(country, cv_sample) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = T))
                                                         
 multi_eval <- multi_pred %>% dplyr::group_by(country, cv_sample) %>% 
-  dplyr::summarise(recall = quanteda.classifiers::recall(prediction, label, by_class = T)) %>%  
+  dplyr::summarise(recall = quanteda.classifiers::recall(prediction, issue, by_class = T)) %>%  
   unnest_wider(recall) %>% 
-  pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "recall")  %>%
-  merge(multi_eval, by = c("country", "cv_sample", "label"))
+  pivot_longer(cols = unique(multi_pred$issue) %>% as.character(), names_to = "issue", values_to = "recall")  %>%
+  merge(multi_eval, by = c("country", "cv_sample", "issue"))
 
 multi_eval <- multi_pred %>% 
   dplyr::group_by(country, cv_sample) %>% 
-  dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, label, by_class = T)) %>%  
-  unnest_wider(f1) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "f1")  %>% 
-  merge(multi_eval, by = c("country", "cv_sample", "label"))
+  dplyr::summarise(f1 = quanteda.classifiers::f1_score(prediction, issue, by_class = T)) %>%  
+  unnest_wider(f1) %>% pivot_longer(cols = unique(multi_pred$issue) %>% as.character(), names_to = "issue", values_to = "f1")  %>% 
+  merge(multi_eval, by = c("country", "cv_sample", "issue"))
 
 
 class_acc <- function(prediction, label) {
@@ -153,11 +185,11 @@ class_acc <- function(prediction, label) {
 
 multi_eval <- multi_pred %>% 
   dplyr::group_by(country, cv_sample) %>% 
-  dplyr::summarise(class_acc = class_acc(prediction, label))  %>%  
-  unnest_wider(class_acc) %>% pivot_longer(cols = c(0:22) %>% as.character(), names_to = "label", values_to = "class_acc")  %>% 
-  merge(multi_eval, by = c("country", "cv_sample", "label"))
+  dplyr::summarise(class_acc = class_acc(prediction, issue))  %>%  
+  unnest_wider(class_acc) %>% pivot_longer(cols =  unique(multi_pred$issue) %>% as.character(), names_to = "issue", values_to = "class_acc")  %>% 
+  merge(multi_eval, by = c("country", "cv_sample", "issue"))
 
-multi_eval <- merge(multi_eval, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label))
+# multi_eval <- merge(multi_eval, data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "issue") %>% select(-c(issue))
 
 multi_times <- read.csv("files/multilingual-times.csv", header = F, col.names = "time")/60
 multi_times$cv_sample <- 1:5
@@ -172,8 +204,6 @@ multi_eval <- multi_eval %>% dplyr::rename("k" = "cv_sample", "class" = "issue")
 tm_eval <- rbind.fill(tm_eval, multi_eval)
 
 
-
-
 tm_eval$accuracy <- tm_eval$accuracy %>% unlist()
 
 ```
@@ -183,6 +213,8 @@ tm_eval$accuracy <- tm_eval$accuracy %>% unlist()
 ```{r tm-eval}
 
 table(tm_eval$country, tm_eval$model_id)
+table(tm_eval$country, tm_eval$model_name)
+
 tm_eval$model_id %>% unique %>% sort
 
 tm_eval <- tm_eval %>% mutate(alpha = ifelse(is.na(alpha), "", alpha),
@@ -310,9 +342,23 @@ Average = (select(tm_eval_issue, c(Country, Issue, Title, "F1 score")) %>%
   cbind(Intercoder = f1_score(cross$issue, cross$issue_cross)) %>% mutate(f1 = 100*f1) %>% dplyr::rename(Intercoder = f1) %>% 
   stargazer(summary = F,rownames = F, 
             title = "Issue-specific performance: F1 score by country", 
-            label = "f1-country",
+            label = "tab:f1-country",
             out = "tables/f1-country.tex", digits = 1)
 
+
+country_issue_temp <- cross %>% dplyr::group_by(country) %>% dplyr::summarise(f1 = quanteda.classifiers::f1_score(issue, issue_cross, by_class = T))
+country_issue <- sapply(country_issue_temp$f1, FUN = function(x) unlist(x)*100) %>% as.data.frame()
+
+names(country_issue) <- country_issue_temp$country %>%  str_to_title() %>% str_replace("Uk" ,"UK")
+
+
+cbind(Issue = country_issue_temp$f1[1][[1]] %>% names, country_issue, Mean = apply(country_issue, MARGIN = 1, FUN = function (x) mean(x, na.rm = T))) %>% 
+  stargazer(summary = F,rownames = F, 
+            title = "Hand coding inter-coder reliability: F1 score by country and issue", 
+            label = "tab:f1-country-issue",
+            out = "tables/f1-country-issue.tex", digits = 2)
+
+# country_issue %>% View
 
 ```
 
@@ -414,9 +460,14 @@ latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx"
 
 ```{r  confusion-transformer}
 
-multi_pred <- read_csv("files/multilingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id")) %>% dplyr::rename("pred_label" = "prediction") %>% 
-  merge(., data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label)) %>% 
-  merge(., data.frame(prediction = unique(press$issue) %>% sort, pred_label = (1:length(unique(press$issue) %>% sort) - 1)), by = "pred_label") %>% select(-c(pred_label))
+# multi_pred <- read_csv("files/multilingual-prediction.csv", col_names = c("country", "cv_sample", "label", "prediction", "id")) %>% dplyr::rename("pred_label" = "prediction") %>% 
+#   merge(., data.frame(issue = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>% select(-c(label)) %>% 
+#   merge(., data.frame(prediction = unique(press$issue) %>% sort, pred_label = (1:length(unique(press$issue) %>% sort) - 1)), by = "pred_label") %>% select(-c(pred_label))
+
+multi_pred <- read.csv("files/multilingual-prediction.csv", header = F, col.names = c("country", "cv_sample", "label", "id"))
+multi_pred <- merge(multi_pred, data.frame(prediction = unique(press$issue) %>% sort, label = (1:length(unique(press$issue) %>% sort) - 1)), by = "label") %>%
+  select(-c(label))
+multi_pred <- merge(labels, multi_pred, by = c("country", "id"))
 
 # Confusion matrix and overall statistics
 multi_pred$issue %>% table
@@ -432,7 +483,7 @@ confusion_abs <- (table(multi_pred$prediction, multi_pred$issue) %>%
 
 # Normalized (rowsums)
 confusion <- round((table(multi_pred$prediction, multi_pred$issue) %>%
-  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table / ((table(multi_pred$prediction, ridge_pred$issue) %>%
+  confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table / ((table(multi_pred$prediction, multi_pred$issue) %>%
   confusionMatrix(mode = "sens_spec", dnn = c("predicted", "truth")))$table %>% rowSums()) * 100, 0)
 
 confusion <- cbind(confusion, confusion_abs[, ncol(confusion_abs)]) %>% rbind(confusion_abs[nrow(confusion_abs),] )
@@ -485,9 +536,66 @@ load("files/cross.RData")
 cross %>%  dplyr::group_by(country) %>% 
   dplyr::summarise(kalpha = kripp.alpha(as.matrix(cbind(issue, issue_cross)) %>% t, method = "nominal")['value'] %>% unlist) %>% as.data.frame() %>% mutate(country = str_to_title(country) %>% str_replace("Uk", "UK")) %>% 
   stargazer(summary = F,rownames = F, 
-            title = "Inter-coder agreement, Krippendorff's alpha", 
+            title = "Inter-coder agreement, Krippendorff's alpha by country", 
             label = "krippendorf",
             out = "tables/krippendorff.tex", digits = 3)
+
+
+
+
+
+
+```
+
+
+
+# Party-specific performance
+
+```{r party-performance, eval=FALSE, include=FALSE}
+
+load("files/multi_pred.RData")
+add_vars <- filter(press, cv_sample > 0) %>% select(c(country, id, parlgov_id, party_name, year, date)) %>% filter(!is.na(parlgov_id) & !is.na(party_name))
+
+party_perf <- merge(add_vars, multi_pred, by = c("country", "id"))
+
+
+party_eval <- party_perf %>% dplyr::group_by(country, parlgov_id, party_name) %>% dplyr::summarise(accuracy = (100 * quanteda.classifiers::accuracy(prediction, issue, by_class = F) %>% unlist %>% as.numeric) %>% round(3),
+                                                                                       precision = (100 * quanteda.classifiers::precision(prediction, issue, by_class = F, na.rm = T)  %>% as.numeric) %>% round(3),
+                                                                                       recall =  (100 * quanteda.classifiers::recall(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
+                                                                                       f1 =  (100 * quanteda.classifiers::f1_score(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3))
+
+party_eval[order(-party_eval$accuracy), ]
+
+party_eval$country <- party_eval$country %>% str_to_title() %>% str_replace("Uk", "UK")
+
+latex_out <- capture.output(
+  stargazer(party_eval, summary = F, rownames = F,
+            title = "Classifier performance by party", 
+            label = "tab:party-eval",
+            digits = 3))
+
+latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccccccc", "\\\\textwidth\\}\\{XXXXXXX") %>% cat(sep = "\n"), file = "tables/party-eval.tex")
+
+
+```
+
+# Over time performance
+
+```{r time-performance, eval=FALSE, include=FALSE}
+
+load("files/multi_pred.RData")
+add_vars <- filter(press, cv_sample > 0) %>% select(c(country, id, parlgov_id, party_name, year, date)) %>% filter(!is.na(parlgov_id) & !is.na(party_name))
+
+party_perf <- merge(add_vars, multi_pred, by = c("country", "id"))
+
+
+party_eval <- party_perf %>% dplyr::group_by(country, parlgov_id, party_name) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = F) %>% unlist,
+                                                                                       precision =  quanteda.classifiers::precision(prediction, issue, by_class = F, na.rm = T),
+                                                                                       recall =  quanteda.classifiers::recall(prediction, issue, by_class = F),
+                                                                                       f1 =  quanteda.classifiers::f1_score(prediction, issue, by_class = F))
+
+
+
 
 
 

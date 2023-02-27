@@ -161,15 +161,13 @@ latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx"
 
 issue_agendas <- readRDS("publication/rds/monthly_agendas.RDS")
 issue_agendas$date <- ymd(issue_agendas$month_start)
-# issue_agendas$attention <- issue_agendas$attention * 100
-# Imm
-for (this_country in unique(issue_agendas$country_name) %>% sort) {
+for (this_country in (unique(issue_agendas$country_name) %>% sort)[5:9]) {
 
-  plot_data <- filter(issue_agendas, country_name == this_country & issue_multi == 9)
+  plot_data <- filter(issue_agendas, country_name == this_country & issue == 9)
   
   plot_data <- filter(plot_data, party_sum > 5)
   
-  thisplot <- ggplot(plot_data, aes(x = date, y = attention)) +
+  thisplot <- ggplot(plot_data, aes(x = date, y = share_multi)) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
           axis.text.y = element_text(size = 14),
           axis.title = element_text(size = 14),
@@ -188,11 +186,10 @@ for (this_country in unique(issue_agendas$country_name) %>% sort) {
                 alpha = 0.8, color = "black",
                 se = F)
   
-  if(min(plot_data$attention) >= 0) thisplot <- thisplot + ylim(c(0, NA))
+  if(min(plot_data$share_multi) >= 0) thisplot <- thisplot + ylim(c(0, NA))
   
 
-    thisplot <- thisplot +
-      geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
+   if(this_country == "germany") thisplot <- thisplot + geom_vline(xintercept = ymd("2015-08-31"), color = "dark grey", lty = 2)
   
   thisplot <- thisplot + facet_wrap(~ party) + theme(strip.text.x = element_text(size = 15))
   

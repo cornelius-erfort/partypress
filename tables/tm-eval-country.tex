@@ -1,6 +1,6 @@
 
 % Table created by stargazer v.5.2.3 by Marek Hlavac, Social Policy Institute. E-mail: marek.hlavac at gmail.com
-% Date and time: Mo, Nov 07, 2022 - 15:03:17
+% Date and time: Mo, Feb 20, 2023 - 15:59:01
 \begin{table}[!htbp] \centering 
   \caption{Best three classifier by country} 
   \label{tab:tm-eval-country} 
@@ -9,33 +9,33 @@
 \hline \\[-1.8ex] 
 Country & Model name & Accuracy (\textbackslash \%) & Precision (\textbackslash \%) & Recall (\textbackslash \%) & F1 score (\textbackslash \%) \\ 
 \hline \\[-1.8ex] 
-Austria & Monolingual Transformer & $73.40$ & $75.52$ & $74.90$ & $74.61$ \\ 
-Austria & Multilingual Transformer & $71.01$ & $71.59$ & $71.50$ & $71.01$ \\ 
-Austria & SuperLearner & $64.40$ & $69.41$ & $63.04$ & $64.56$ \\ 
-Denmark & Monolingual Transformer & $69.19$ & $69.50$ & $68.85$ & $68.03$ \\ 
-Denmark & Multilingual Transformer & $68.59$ & $67.57$ & $66.42$ & $66.16$ \\ 
-Denmark & SuperLearner & $66.54$ & $68.03$ & $63.67$ & $64.52$ \\ 
-Germany & Monolingual Transformer & $75.23$ & $74.57$ & $72.74$ & $72.52$ \\ 
-Germany & Multilingual Transformer & $74.66$ & $72.80$ & $73.59$ & $72.21$ \\ 
-Germany & SuperLearner & $66.87$ & $68.26$ & $63.88$ & $63.93$ \\ 
-Ireland & Monolingual Transformer & $75.72$ & $70.41$ & $71.69$ & $69.72$ \\ 
-Ireland & Multilingual Transformer & $73.66$ & $68.85$ & $70.01$ & $68.36$ \\ 
-Ireland & SuperLearner & $70.94$ & $66.76$ & $64.85$ & $64.45$ \\ 
-Netherlands & Monolingual Transformer & $72.59$ & $73.31$ & $70.74$ & $70.85$ \\ 
-Netherlands & Multilingual Transformer & $69.53$ & $67.77$ & $69.41$ & $67.59$ \\ 
-Netherlands & SuperLearner & $64.60$ & $67.82$ & $60.35$ & $61.84$ \\ 
+Austria & Monolingual Transformer & $73.30$ & $74.29$ & $76.39$ & $74.71$ \\ 
+Austria & Multilingual Transformer & $72.50$ & $73.69$ & $75.47$ & $73.99$ \\ 
+Austria & Ridge (L2) & $63.91$ & $70.41$ & $63.25$ & $65.29$ \\ 
+Denmark & Multilingual Transformer & $69.05$ & $67.02$ & $66.88$ & $66.11$ \\ 
+Denmark & Monolingual Transformer & $67.42$ & $67.10$ & $67.39$ & $65.53$ \\ 
+Denmark & Ridge (L2) & $66.49$ & $65.92$ & $61.03$ & $61.66$ \\ 
+Germany & Monolingual Transformer & $75.90$ & $76.38$ & $75.31$ & $74.95$ \\ 
+Germany & Multilingual Transformer & $74.08$ & $72.12$ & $71.40$ & $70.70$ \\ 
+Germany & SuperLearner & $67.19$ & $68.83$ & $65.67$ & $65.08$ \\ 
+Ireland & Monolingual Transformer & $75.48$ & $72.26$ & $70.51$ & $70.12$ \\ 
+Ireland & Multilingual Transformer & $73.64$ & $68.92$ & $69.90$ & $68.16$ \\ 
+Ireland & Ridge (L2) & $70.33$ & $70.34$ & $62.86$ & $64.04$ \\ 
+Netherlands & Monolingual Transformer & $73.20$ & $72.95$ & $71.10$ & $71.12$ \\ 
+Netherlands & Multilingual Transformer & $69.44$ & $68.74$ & $68.26$ & $67.54$ \\ 
+Netherlands & SuperLearner & $65.38$ & $66.39$ & $64.25$ & $64.63$ \\ 
 Poland & Ridge (L2) & $58.47$ & $71.12$ & $56.48$ & $60.56$ \\ 
 Poland & Monolingual Transformer & $58.31$ & $58.35$ & $57.60$ & $56.30$ \\ 
 Poland & Naive bayes & $57.72$ & $66.15$ & $54.92$ & $57.41$ \\ 
-Spain & Multilingual Transformer & $73.86$ & $68.45$ & $68.05$ & $66.79$ \\ 
-Spain & Monolingual Transformer & $72.17$ & $68.28$ & $65.99$ & $65.11$ \\ 
-Spain & SuperLearner & $70.30$ & $72.98$ & $60.23$ & $63.24$ \\ 
-Sweden & Monolingual Transformer & $72.04$ & $71.87$ & $70.55$ & $70.16$ \\ 
-Sweden & Multilingual Transformer & $70.05$ & $69.65$ & $68.67$ & $68.16$ \\ 
+Spain & Multilingual Transformer & $73.57$ & $68.16$ & $67.38$ & $66.16$ \\ 
+Spain & Monolingual Transformer & $71.80$ & $67.05$ & $65.19$ & $64.67$ \\ 
+Spain & SuperLearner & $69.12$ & $73.34$ & $58.81$ & $62.71$ \\ 
+Sweden & Monolingual Transformer & $72.58$ & $72.53$ & $71.59$ & $71.07$ \\ 
+Sweden & Multilingual Transformer & $70.01$ & $70.05$ & $68$ & $68.22$ \\ 
 Sweden & Ridge (L2) & $59.50$ & $63.89$ & $53.91$ & $56.39$ \\ 
-UK & Multilingual Transformer & $68.68$ & $68.39$ & $70.06$ & $67.72$ \\ 
-UK & Monolingual Transformer & $67.42$ & $69.18$ & $70.06$ & $68.39$ \\ 
-UK & SuperLearner & $62.17$ & $65.93$ & $61.70$ & $61.67$ \\ 
+UK & Monolingual Transformer & $68.10$ & $69.93$ & $70.08$ & $69.12$ \\ 
+UK & Multilingual Transformer & $68.01$ & $68.01$ & $68.04$ & $67.27$ \\ 
+UK & SuperLearner & $63.96$ & $67.24$ & $63.61$ & $64.38$ \\ 
 \hline \\[-1.8ex] 
 \end{tabular} 
 \end{table} 

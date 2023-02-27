@@ -2,10 +2,10 @@
 title: "PARTYPRESS datasets and variables"
 # author: "Cornelius Erfort, Lukas F. Stoetzer, Heike Klüver"
 # thanks: 'Research for this contribution is part of the Cluster of Excellence "Contestations of the Liberal Script" (EXC 2055, Project-ID: 390715649), funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany\textquotesingle s Excellence Strategy. We thank Leonie Fuchs, Paul Bochtler, Daniel Cruz, Johannes Lattmann, Felix Heimburger,  Violeta Haas and Tim Wappenhans for valuable research assistance. Replication material can be found on \texttt{\href{https://github.com/cornelius-erfort/scripts-issue-agendas}{https://github.com/cornelius-erfort/scripts-issue-agendas}.}\vspace{5mm}'
-date: "2022-11-18"
+date: "2023-02-06"
 output: 
   pdf_document:
-    # extra_dependencies: ["tabularx", "textcomp", "tikz", "pgf"]
+    # extra_dependencies: ["tabularx", "textcomp", "tikz", "pgf", "pgfplots"]
     toc: true
     toc_depth: 1
     includes:
@@ -20,6 +20,98 @@ library(dplyr)
 library(stringr)
 
 ```
+
+\newpage
+
+\color{red}
+# Overview
+
+This document is designed to facilitate the use of the PARTYPRESS database. \autoref{fig:data-structure} visualizes how the different datasets are connected. For each dataset the following sections provide an overview of variables with a description.
+
+There are five different datasets. First, the main dataset \textit{PARTYPRESS} that provides information about each individual press release in our database, e.g. issuing party or date. Second, \textit{PARTYPRESS ISSUES} provides all issues used for classification; it can be merged to the other datasets. Third, \textit{PARTYPRESS TEXTS} provides the full texts for each press release (the main dataset only contains the header); it can be merged to the main dataset. Fourth, \textit{MONTHLY AGENDAS} provides data from the main dataset aggregated to calendar months. Fifth, \textit{WEEKLY AGENDAS} provides data from the main dataset aggregated to calendar weeks.
+
+\color{black}
+
+\begin{figure}[!ht]
+\caption{Data structure}\label{fig:data-structure}
+\begin{tikzpicture}[node distance=.5cm]
+\tikzstyle{normal} = [rectangle, minimum width=2.5cm, minimum height=.5cm,text centered, draw=black]
+\tikzstyle{title} = [minimum width=2.5cm, minimum height=.5cm,text centered]
+\node (core-0) [title, xshift = -3.1cm, yshift = 2cm] {\textit{Main}};
+\node (core-1) [normal, below of=core-0] {\path{country_name}};
+\node (core-2) [normal, below of=core-1] {\path{id}};
+\node (core-3) [normal, below of=core-2] {\path{parlgov_id}};
+\node (core-4) [normal, below of=core-3] {\path{party_name}};
+\node (core-5) [normal, below of=core-4] {\path{header}};
+\node (core-6) [normal, below of=core-5] {\path{date}};
+\node (core-7) [normal, below of=core-6] {\path{month_start}};
+\node (core-8) [normal, below of=core-7] {\path{week_start}};
+\node (core-9) [normal, below of=core-8] {\path{issue_multi}};
+\node (core-10) [normal, below of=core-9] {\path{issue_mono}};
+\node (core-11) [normal, below of=core-10] {\path{issue_ridge}};
+\node (core-12) [normal, below of=core-11] {\path{issue_super}};
+\node (core-13) [normal, below of=core-12] {\path{issue}};
+\node (core-14) [normal, below of=core-13] {\path{position}};
+\node (core-15) [normal, below of=core-14] {\path{...}};
+\node (text-0) [title, left of=core-0, xshift = -4cm] {\textit{Texts}};
+\node (text-1) [normal, below of=text-0] {\path{country_name}};
+\node (text-2) [normal, below of=text-1] {\path{id}};
+\node (text-3) [normal, below of=text-2] {\path{text}};
+\node (issue-0) [title, below of=text-3, yshift=-8cm] {\textit{Issues}};
+\node (issue-1) [normal, below of=issue-0] {\path{issue}};
+\node (issue-2) [normal, below of=issue-1] {\path{issue_name}};
+\draw[->, rounded corners=4mm] (core-1.west) -- (text-1.east);
+\draw[->, rounded corners=4mm] (core-2.west) -- (text-2.east);
+\draw [fill=white] (core-1.west) circle[radius= 0.2 em]; 
+\draw [fill=white] (core-2.west) circle[radius= 0.2 em]; 
+\draw[, rounded corners=4mm] (core-9.west) -| ++(-.5,-.8) ;
+\draw[, rounded corners=4mm] (core-10.west) -| ++(-.5,-.8) ;
+\draw[, rounded corners=4mm] (core-11.west) -| ++(-.5,-.8) ;
+\draw[, rounded corners=4mm] (core-12.west) -| ++(-.5,-.8) ;
+\draw[->, rounded corners=4mm] (core-13.west) -| ++(-.5,-1) |-  (issue-1.east);
+\draw [fill=white] (core-9.west) circle[radius= 0.2 em]; 
+\draw [fill=white] (core-10.west) circle[radius= 0.2 em]; 
+\draw [fill=white] (core-11.west) circle[radius= 0.2 em]; 
+\draw [fill=white] (core-12.west) circle[radius= 0.2 em]; 
+\draw [fill=white] (core-13.west) circle[radius= 0.2 em]; 
+\node (monthly-0) [title, right of=core-0, xshift = 6cm, yshift = 0cm] {\textit{Monthly}};
+\node (monthly-1) [normal, below of=monthly-0] {\path{country_name}};
+\node (monthly-2) [normal, below of=monthly-1] {\path{parlgov_id}};
+\node (monthly-3) [normal, below of=monthly-2] {\path{party_name}};
+\node (monthly-4) [normal, below of=monthly-3] {\path{month_start}};
+\node (monthly-5) [normal, below of=monthly-4] {\path{issue}};
+\node (monthly-6) [normal, below of=monthly-5] {\path{share_multi}};
+\node (monthly-7) [normal, below of=monthly-6] {\path{share_mono}};
+\node (monthly-8) [normal, below of=monthly-7] {\path{share_ridge}};
+\node (monthly-9) [normal, below of=monthly-8] {\path{share_super}};
+\node (monthly-10) [normal, below of=monthly-9] {\path{party_sum}};
+\node (monthly-11) [normal, below of=monthly-10] {\path{...}};
+\node (line) [title, left of=monthly-4, xshift = -2.5cm, yshift = .25cm] {aggregated};
+\node (line) [title, left of=monthly-4, xshift = -2.5cm, yshift = -.25cm] {by month};
+\node (weekly-0) [title, below of=monthly-9, xshift = 0cm, yshift = -1.5cm] {\textit{Weekly}};
+\node (weekly-1) [normal, below of=weekly-0] {\path{country_name}};
+\node (weekly-2) [normal, below of=weekly-1] {\path{parlgov_id}};
+\node (weekly-3) [normal, below of=weekly-2] {\path{party_name}};
+\node (weekly-4) [normal, below of=weekly-3] {\path{week_start}};
+\node (weekly-5) [normal, below of=weekly-4] {\path{issue}};
+\node (weekly-6) [normal, below of=weekly-5] {\path{share_multi}};
+\node (weekly-7) [normal, below of=weekly-6] {\path{share_mono}};
+\node (weekly-8) [normal, below of=weekly-7] {\path{share_ridge}};
+\node (weekly-9) [normal, below of=weekly-8] {\path{share_super}};
+\node (weekly-10) [normal, below of=weekly-9] {\path{party_sum}};
+\node (weekly-11) [normal, below of=weekly-10] {\path{...}};
+\node (line) [title, left of=weekly-4, xshift = -2.5cm, yshift = .25cm] {aggregated};
+\node (line) [title, left of=weekly-4, xshift = -2.5cm, yshift = -.25cm] {by week};
+\draw[->, rounded corners=4mm] (core-7.east) -| ++(.5,.75)  |- (monthly-4.west);
+\draw[->, rounded corners=4mm] (core-8.east) -| ++(.5,-1)  |- (weekly-4.west);
+\draw [fill=white] (core-7.east) circle[radius= 0.2 em]; 
+\draw [fill=white] (core-8.east) circle[radius= 0.2 em]; 
+\draw[->, rounded corners=4mm] (weekly-5.west)  -| ++(-.5,-.75)  |- (issue-1.east);
+\draw[, rounded corners=4mm] (monthly-5.west) -| ++(-.5,-6.8) ;
+\draw [fill=white] (weekly-5.west) circle[radius= 0.2 em]; 
+\draw [fill=white] (monthly-5.west) circle[radius= 0.2 em]; 
+\end{tikzpicture}
+\end{figure}
 
 
 
