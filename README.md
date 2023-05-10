@@ -1,4 +1,4 @@
-# Measuring parties issue agendas (SCRIPTS)
+# The PARTYPRESS Database: A New Comparative Database of Parties’ Press Releases
 
 Political parties emphasize different issues in their public communication efforts to address the topics of the day and to strengthen their policy profiles. Here, we develop and evaluate models to automatically classify parties' press releases into issue categories to dynamically measure issue attention.
 
