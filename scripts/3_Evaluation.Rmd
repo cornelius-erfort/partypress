@@ -226,6 +226,8 @@ tm_eval <- tm_eval %>% mutate(alpha = ifelse(is.na(alpha), "", alpha),
 
 tm_eval$accuracy <- tm_eval$accuracy %>% unlist
 
+save(tm_eval, file = "files/tm_eval.RData")
+
 tm_eval_mean <- aggregate(cbind(accuracy, precision, recall, f1) ~ country + model_name + model_id + weight  + distribution + type + smooth + alpha, tm_eval, function (x) round(mean(x, na.rm = T)*100,2))
 tm_eval_mean <- tm_eval_mean[order(tm_eval_mean$country, -tm_eval_mean$accuracy), ]
 
@@ -558,15 +560,18 @@ add_vars <- filter(press, cv_sample > 0) %>% select(c(country, id, parlgov_id, p
 
 party_perf <- merge(add_vars, multi_pred, by = c("country", "id"))
 
-
 party_eval <- party_perf %>% dplyr::group_by(country, parlgov_id, party_name) %>% dplyr::summarise(accuracy = (100 * quanteda.classifiers::accuracy(prediction, issue, by_class = F) %>% unlist %>% as.numeric) %>% round(3),
                                                                                        precision = (100 * quanteda.classifiers::precision(prediction, issue, by_class = F, na.rm = T)  %>% as.numeric) %>% round(3),
                                                                                        recall =  (100 * quanteda.classifiers::recall(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
-                                                                                       f1 =  (100 * quanteda.classifiers::f1_score(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3))
+                                                                                       f1 =  (100 * quanteda.classifiers::f1_score(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
+                                                                                       n = sum(n()))
 
 party_eval[order(-party_eval$accuracy), ]
 
 party_eval$country <- party_eval$country %>% str_to_title() %>% str_replace("Uk", "UK")
+
+
+cor(party_eval$accuracy, party_eval$n)
 
 latex_out <- capture.output(
   stargazer(party_eval, summary = F, rownames = F,
@@ -575,6 +580,23 @@ latex_out <- capture.output(
             digits = 3))
 
 latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx")  %>% str_replace_all("\\@\\{\\\\extracolsep\\{5pt\\}\\} ccccccc", "\\\\textwidth\\}\\{XXXXXXX") %>% cat(sep = "\n"), file = "tables/party-eval.tex")
+
+
+party_eval$accuracy %>% summary
+
+
+
+ggplot(party_eval, aes(x = country, y = accuracy)) +
+  geom_violin(draw_quantiles = c(0.5)) + 
+  geom_text_repel(aes(label = party_name), family = "LM Roman 10") +
+  # geom_jitter() +
+  # scale_y_continuous(limits = c(NA, 6000)) +
+  ylab("Accuracy of predictions for each party [%]") + xlab("") +
+   theme(text = element_text(size = 14),
+         axis.text.x = element_text(angle = 15, hjust=1))
+
+ggsave(str_c("plots/country_accuracy_boxplot.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
+
 
 
 ```
@@ -586,19 +608,75 @@ latex_out <- capture.output(latex_out %>% str_replace_all( "tabular", "tabularx"
 load("files/multi_pred.RData")
 add_vars <- filter(press, cv_sample > 0) %>% select(c(country, id, parlgov_id, party_name, year, date)) %>% filter(!is.na(parlgov_id) & !is.na(party_name))
 
-party_perf <- merge(add_vars, multi_pred, by = c("country", "id"))
+time_perf <- merge(add_vars, multi_pred, by = c("country", "id"))
+
+time_eval <- time_perf %>% dplyr::group_by(country, year) %>% dplyr::summarise(accuracy = (100 * quanteda.classifiers::accuracy(prediction, issue, by_class = F) %>% unlist %>% as.numeric) %>% round(3),
+                                                                                       precision = (100 * quanteda.classifiers::precision(prediction, issue, by_class = F, na.rm = T)  %>% as.numeric) %>% round(3),
+                                                                                       recall =  (100 * quanteda.classifiers::recall(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
+                                                                                       f1 =  (100 * quanteda.classifiers::f1_score(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
+                                                                                       n = sum(n()))
+
+time_eval$country <- time_eval$country %>% str_to_title() %>% str_replace("Uk", "UK")
+
+time_eval$year <- time_eval$year %>% as.numeric()
+
+ggplot(time_eval, aes(x = year, y = accuracy)) +
+  geom_line(family = "LM Roman 10") +
+  ylab("Accuracy of predictions [%]") + xlab("") +
+  facet_wrap(~ country, nrow = 3)
+
+ggsave(str_c("plots/country_accuracy_time.pdf"), device = cairo_pdf, width = 5*2^.5, height = 5)
 
 
-party_eval <- party_perf %>% dplyr::group_by(country, parlgov_id, party_name) %>% dplyr::summarise(accuracy = quanteda.classifiers::accuracy(prediction, issue, by_class = F) %>% unlist,
-                                                                                       precision =  quanteda.classifiers::precision(prediction, issue, by_class = F, na.rm = T),
-                                                                                       recall =  quanteda.classifiers::recall(prediction, issue, by_class = F),
-                                                                                       f1 =  quanteda.classifiers::f1_score(prediction, issue, by_class = F))
+mymod <- lm(accuracy ~ year + country, time_eval)
+summary(mymod)
+margins::cplot(mymod)
+
+
+
+time_eval <- time_perf %>% dplyr::group_by(country, year, parlgov_id) %>% dplyr::summarise(accuracy = (100 * quanteda.classifiers::accuracy(prediction, issue, by_class = F) %>% unlist %>% as.numeric) %>% round(3),
+                                                                                       precision = (100 * quanteda.classifiers::precision(prediction, issue, by_class = F, na.rm = T)  %>% as.numeric) %>% round(3),
+                                                                                       recall =  (100 * quanteda.classifiers::recall(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
+                                                                                       f1 =  (100 * quanteda.classifiers::f1_score(prediction, issue, by_class = F)  %>% as.numeric) %>% round(3),
+                                                                                       n = sum(n()))
+
+
+# 
+# time_eval$accuracy <- time_eval$count / time_eval$n
+
+time_eval$country <- time_eval$country %>% str_to_title() %>% str_replace("Uk", "UK")
+
+time_eval$year <- time_eval$year %>% as.numeric()
+
+time_eval$parlgov_id <- as.character(time_eval$parlgov_id)
+
+# time_eval$issue <- as.character(time_eval$issue)
+
+mymod <- lm(accuracy ~ year + parlgov_id, time_eval)
+summary(mymod)
+margins::cplot(mymod)
 
 
 
 
 
+time_eval <- time_perf  %>% mutate(count = ifelse(prediction == issue, 1, 0)) %>% dplyr::group_by(country, year, issue) %>% 
+  dplyr::summarise(n = sum(n()),
+                   count = sum(count))
+# 
+time_eval$accuracy <- time_eval$count / time_eval$n
 
+time_eval$country <- time_eval$country %>% str_to_title() %>% str_replace("Uk", "UK")
+
+time_eval$year <- time_eval$year %>% as.numeric()
+
+# time_eval$parlgov_id <- as.character(time_eval$parlgov_id)
+
+time_eval$issue <- as.character(time_eval$issue)
+
+mymod <- lm(accuracy ~ year + issue, time_eval)
+summary(mymod)
+margins::cplot(mymod)
 
 ```
 

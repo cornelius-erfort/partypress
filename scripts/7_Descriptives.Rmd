@@ -27,7 +27,7 @@ This script is based mainly on the functions of the quanteda package. For the cr
 start_time <- Sys.time()
 
 packages <- c(
-  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "quanteda.classifiers", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "openxlsx", "tools", "caret", "Seurat")
+  "quanteda", "quanteda.textplots", "quanteda.textmodels", "quanteda.textstats", "quanteda.classifiers", "dplyr", "tm", "rmarkdown", "plyr", "readr", "ggplot2", "stringr", "formatR", "readstata13", "lubridate", "glmnet", "kableExtra", "stargazer", "tidyr", "extrafont", "openxlsx", "tools", "caret", "Seurat", "urltools", "httr")
 
 lapply(packages[!(packages %in% rownames(installed.packages()))], install.packages)
 
@@ -50,6 +50,7 @@ if(!dir.exists("files")) dir.create("files")
 
 ```{r sources}
 load("files/press.RData")
+
 sources <- read.xlsx("data/sources.xlsx") %>% select(c(Country, Parlgov.Party.Code, Link.to.PR.start.page, Abbr.)) %>% filter(!(Abbr. %in% c("gruene_partei",
 "spoe_pressedienst",
 "fpoe_bundesparteileitung",
@@ -67,6 +68,7 @@ sources <- merge(unique(select(press, c(country, party, party_name))), sources, 
 View(sources)
 
 stargazer(sources, summary = F)
+
 
 ```
 

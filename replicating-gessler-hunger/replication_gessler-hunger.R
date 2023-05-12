@@ -171,12 +171,12 @@ replication$asylum_z <- scale(replication$asylum, center = TRUE, scale = TRUE) %
 # replication$pub_salience_z <- scale(replication$pub_salience_z, center = TRUE, scale = TRUE)
 
 
-pub_salience <- gtrends("Flüchtling", geo = "DE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time
+pub_salience <- gtrends("Fl�chtling", geo = "DE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time
 
 
 # gtrends("Flüchtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)
 
-if(!("AT" %in% pub_salience$geo)) pub_salience <- gtrends("Flüchtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+if(!("AT" %in% pub_salience$geo)) pub_salience <- gtrends("Fl�chtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
 if(!("IE" %in% pub_salience$geo)) pub_salience <- gtrends("refugee", geo = "IE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
@@ -184,7 +184,7 @@ if(!("GB" %in% pub_salience$geo)) pub_salience <- gtrends("refugee", geo = "GB",
 
 if(!("NL" %in% pub_salience$geo)) pub_salience <- gtrends("vluchteling", geo = "NL", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
-if(!("PL" %in% pub_salience$geo)) pub_salience <- gtrends("uchodźca", geo = "PL", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+# if(!("PL" %in% pub_salience$geo)) pub_salience <- gtrends("uchodźca", geo = "PL", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
 if(!("DK" %in% pub_salience$geo)) pub_salience <- gtrends("flygtning", geo = "DK", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
