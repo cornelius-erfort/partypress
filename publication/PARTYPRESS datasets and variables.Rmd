@@ -1,7 +1,7 @@
 ---
 title: "PARTYPRESS datasets and variables"
-# author: "Cornelius Erfort, Lukas F. Stoetzer, Heike Klüver"
-# thanks: 'Research for this contribution is part of the Cluster of Excellence "Contestations of the Liberal Script" (EXC 2055, Project-ID: 390715649), funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany\textquotesingle s Excellence Strategy. We thank Leonie Fuchs, Paul Bochtler, Daniel Cruz, Johannes Lattmann, Felix Heimburger,  Violeta Haas and Tim Wappenhans for valuable research assistance. Replication material can be found on \texttt{\href{https://github.com/cornelius-erfort/scripts-issue-agendas}{https://github.com/cornelius-erfort/scripts-issue-agendas}.}\vspace{5mm}'
+author: "Cornelius Erfort, Lukas F. Stoetzer, Heike Klüver"
+thanks: 'We are grateful for valuable comments and suggestions by Eri Bertsou and excellent research assistance by Paul Bochtler, Daniel Cruz, Leonie Fuchs, Violeta Haas, Felix Heimburger, Johannes Lattmann, and Tim Wappenhans. Research for this contribution is part of the Cluster of Excellence "Contestations of the Liberal Script" (EXC 2055, Project-ID: 390715649), funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) under Germany´s Excellence Strategy. Cornelius Erfort is moreover grateful for generous funding provided by the DFG through the Research Training Group DYNAMICS (GRK 2458/1).\vspace{5mm}'
 date: "2023-02-06"
 output: 
   pdf_document:
@@ -23,14 +23,13 @@ library(stringr)
 
 \newpage
 
-\color{red}
 # Overview
 
 This document is designed to facilitate the use of the PARTYPRESS database. \autoref{fig:data-structure} visualizes how the different datasets are connected. For each dataset the following sections provide an overview of variables with a description.
 
 There are five different datasets. First, the main dataset \textit{PARTYPRESS} that provides information about each individual press release in our database, e.g. issuing party or date. Second, \textit{PARTYPRESS ISSUES} provides all issues used for classification; it can be merged to the other datasets. Third, \textit{PARTYPRESS TEXTS} provides the full texts for each press release (the main dataset only contains the header); it can be merged to the main dataset. Fourth, \textit{MONTHLY AGENDAS} provides data from the main dataset aggregated to calendar months. Fifth, \textit{WEEKLY AGENDAS} provides data from the main dataset aggregated to calendar weeks.
 
-\color{black}
+\footnotetext[1]{\label{note1} The text and header of the press releases will be published after permission has been granted by the copyright holders.}
 
 \begin{figure}[!ht]
 \caption{Data structure}\label{fig:data-structure}
@@ -42,7 +41,7 @@ There are five different datasets. First, the main dataset \textit{PARTYPRESS} t
 \node (core-2) [normal, below of=core-1] {\path{id}};
 \node (core-3) [normal, below of=core-2] {\path{parlgov_id}};
 \node (core-4) [normal, below of=core-3] {\path{party_name}};
-\node (core-5) [normal, below of=core-4] {\path{header}};
+\node (core-5) [normal, below of=core-4] {\path{header}*};
 \node (core-6) [normal, below of=core-5] {\path{date}};
 \node (core-7) [normal, below of=core-6] {\path{month_start}};
 \node (core-8) [normal, below of=core-7] {\path{week_start}};
@@ -56,7 +55,7 @@ There are five different datasets. First, the main dataset \textit{PARTYPRESS} t
 \node (text-0) [title, left of=core-0, xshift = -4cm] {\textit{Texts}};
 \node (text-1) [normal, below of=text-0] {\path{country_name}};
 \node (text-2) [normal, below of=text-1] {\path{id}};
-\node (text-3) [normal, below of=text-2] {\path{text}};
+\node (text-3) [normal, below of=text-2] {\path{text}*};
 \node (issue-0) [title, below of=text-3, yshift=-8cm] {\textit{Issues}};
 \node (issue-1) [normal, below of=issue-0] {\path{issue}};
 \node (issue-2) [normal, below of=issue-1] {\path{issue_name}};
@@ -116,9 +115,12 @@ There are five different datasets. First, the main dataset \textit{PARTYPRESS} t
 
 
 \newpage
+\footnotetext[1]{\label{note1} The text and header of the press releases will be published after permission has been granted by the copyright holders.}
+
 # Main dataset PARTYPRESS
 
 Load files \path{partypress.csv} (67MB) or \path{partypress.RDS} (9MB) or \path{partypress.dta} (600MB).
+
 
 ### Variables
 \renewcommand{\arraystretch}{1}
@@ -138,7 +140,7 @@ Load files \path{partypress.csv} (67MB) or \path{partypress.RDS} (9MB) or \path{
 
 \hline
 
-\path{header}                &   [string]         &   Header of the press release in original language   \\
+\path{header}*                &   [string]         &   Header of the press release in original language \\
 \path{date}                  &   [date]         &   Issue date of the press release  \\
 \path{month}                 &   [yyyymm]      &   Issue month of the press release  \\
 \path{month_start}           &   [date]            &   Date of the first day of the month  \\
@@ -216,6 +218,8 @@ partypress_issues
 \newpage
 
 # Raw texts dataset PARTYPRESS TEXTS
+\footnotetext[1]{\label{note1} The text and header of the press releases will be published after permission has been granted by the copyright holders.}
+
 Load files \path{partypress_texts.csv} (561MB) or \path{partypress_texts.RDS} (193MB) (not available as \path{.dta}).
 
 This dataset provides the raw texts of all press releases. The headers are contained in the main dataset.
@@ -230,7 +234,7 @@ We provide the texts separately because they use a lot of disk space but some us
 
 \path{country_name}          &   [string]         &   Name of the country in small caps  \\
 \path{id}                    &   [integer]        &   Press release identifier, unique within \path{country_name}  \\
-\path{text}                  &   [string]         &   Text of press releases in original language\\
+\path{text}*                  &   [string]         &   Text of press releases in original language)\\
 
 \end{tabularx}
 

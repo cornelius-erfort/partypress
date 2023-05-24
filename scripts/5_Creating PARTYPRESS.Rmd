@@ -183,7 +183,7 @@ partypress$week_start <- floor_date(partypress$date, "weeks", week_start = 1)
 partypress$week_end <- ceiling_date(partypress$date - 1, "weeks", week_start = 7)
 
 
-partypress <- select(partypress, c("country", "id", "parlgov_id", "party", "party_name", "party_name_english", "family_name", "date", "month", "month_start", "month_end", "calendar_week", "week_start", "week_end", "header", "multi", "mono", "ridge", "super", "issue", "issue_cross", "position", "position_cross", "cv_sample", "text")) %>% 
+partypress <- select(partypress, c("country", "id", "parlgov_id", "party", "party_name", "party_name_english", "family_name", "date", "month", "month_start", "month_end", "calendar_week", "week_start", "week_end", "multi", "mono", "ridge", "super", "issue", "issue_cross", "position", "position_cross", "cv_sample")) %>% #  "header", "text"
   dplyr::rename(c(country_name = country,
                   issue_multi = multi,
                   issue_mono = mono,
@@ -202,7 +202,7 @@ partypress <- select(partypress, c("country", "id", "parlgov_id", "party", "part
                   position = position %>% as.numeric(),
                   position_coder2 = position_coder2 %>% as.numeric())
 
-partypress_texts <- select(partypress, c("country_name", "id", "text"))
+partypress_texts <- select(partypress, c("country_name", "id")) # , "text"
 
 # Main dataset:
 # country_name
@@ -234,11 +234,9 @@ partypress_texts <- select(partypress, c("country_name", "id", "text"))
 # cv_sample (used in cross validation of evaluation models, k = 1,2,3,4,5, not used: -1)
 
 
-
-
 # partypress <- select(partypress, -c(text))
 
-partypress <- select(partypress, c(country_name, id, parlgov_id, party, party_name, party_name_english, family_name, date, month, month_start, month_end, calendar_week, week_start, week_end,  header, issue_multi, issue_mono, issue_ridge, issue_super, issue, issue_coder2, position, position_coder2, cv_sample))
+partypress <- select(partypress, c(country_name, id, parlgov_id, party, party_name, party_name_english, family_name, date, month, month_start, month_end, calendar_week, week_start, week_end, issue_multi, issue_mono, issue_ridge, issue_super, issue, issue_coder2, position, position_coder2, cv_sample)) # header
 
 partypress <- partypress[order(partypress$country_name, partypress$parlgov_id, partypress$date), ]
 
@@ -268,9 +266,9 @@ write_dta(partypress_issues, path = "publication/dta/partypress_issues.dta")
 # text
 
 
-saveRDS(partypress_texts, file = "publication/rds/partypress_texts.RDS")
-write.csv(partypress_texts, file = "publication/csv/partypress_texts.csv", row.names = F, fileEncoding = "UTF-8")
-# write_dta(partypress_texts, path = "publication/partypress_texts.dta") ## too large
+# saveRDS(partypress_texts, file = "publication/rds/partypress_texts.RDS")
+# write.csv(partypress_texts, file = "publication/csv/partypress_texts.csv", row.names = F, fileEncoding = "UTF-8")
+# # write_dta(partypress_texts, path = "publication/partypress_texts.dta") ## too large
 
 
 # partypress_issues <- readRDS("publication/partypress_issues.RDS")
