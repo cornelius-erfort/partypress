@@ -11,15 +11,10 @@ set scheme s1mono
 
 clear all
 
-
-* cd "C:\Users\scripts\Desktop\SCRIPTS\GitHub\scripts-issue-agendas\replicating-gessler-hunger\_backup"
-cd "C:\Users\scripts\Desktop\SCRIPTS\GitHub\scripts-issue-agendas\replicating-gessler-hunger"
-
-
+cd
 
 * load data
-* use "replication.dta" 
-use "stata-replication-green.dta", clear
+use "stata-replication_green.dta", clear
 drop if sal == .
 drop if polling == .
 
@@ -74,17 +69,17 @@ label var sal_green_p "salience of Green party"
 
 * combined model
 xtabond sal sal_green_p L.sal_green_p polls_green , vce(robust) lags(2) // noref_z  refugees_z
-outreg2 using model1agreen, ctitle(all) replace label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(all) replace label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * test for autocorrelation ************************************************************************
 estat abond
 
 
 * AT
 xtabond sal sal_green_p L.sal_green_p polls_green if countryid == 1, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(AT) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(AT) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * DE
 xtabond sal sal_green_p L.sal_green_p polls_green  if countryid == 2, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(DE) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(DE) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 
 * CH
 *xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 3, vce(robust) lags(2)
@@ -92,7 +87,7 @@ outreg2 using model1agreen, ctitle(DE) append  label tex dec(2) pdec(2)  alpha(0
 
 * DK
 xtabond sal sal_green_p L.sal_green_p polls_green  if countryid == 4, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(DK) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(DK) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 
 * ES
 * xtabond sal sal_rrp L.sal_rrp noref_z polls_ppr refugees_z if countryid == 5, vce(robust) lags(2)
@@ -100,11 +95,11 @@ outreg2 using model1agreen, ctitle(DK) append  label tex dec(2) pdec(2)  alpha(0
 
 * IE
 xtabond sal sal_green_p L.sal_green_p  polls_green  if countryid == 6, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(IE) append  label tex dec(2) pdec(2) 
+outreg2 using model1a_green, ctitle(IE) append  label tex dec(2) pdec(2) 
 
 * NL
 xtabond sal sal_green_p L.sal_green_p polls_green  if countryid == 7, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(NL) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(NL) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 
 * PL
 * xtabond sal sal_green_p L.sal_green_p polls_green if countryid == 8, vce(robust) lags(2)
@@ -112,10 +107,10 @@ outreg2 using model1agreen, ctitle(NL) append  label tex dec(2) pdec(2)  alpha(0
 
 * SE
 xtabond sal sal_green_p L.sal_green_p polls_green  if countryid == 9, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(SE) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(SE) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 * UK
 xtabond sal sal_green_p L.sal_green_p polls_green  if countryid == 10, vce(robust) lags(2)
-outreg2 using model1agreen, ctitle(UK) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
+outreg2 using model1a_green, ctitle(UK) append  label tex dec(2) pdec(2)  alpha(0.001, 0.01, 0.05)
 
 
 

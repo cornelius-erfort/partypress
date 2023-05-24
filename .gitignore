@@ -46,3 +46,4 @@ replicating-gessler-hunger/stata-replication.dta
 *_archive*
 *.RProj
 *.dta
+*_backup*

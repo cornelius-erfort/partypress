@@ -1,4 +1,3 @@
-
 library(dplyr)
 library(haven)
 library(stringr)
@@ -6,51 +5,17 @@ library(plyr)
 library(gtrendsR)
 library(lubridate)
 
-setwd("replicating-gessler-hunger")
-
 
 ###############
 # SALIENCE
 ###############
 
+# Load PARTYPRESS monthly agendas (monthly issue attention)
+monthly_agendas <- readRDS("datasets/rds/monthly_agendas.rds")
 
 
-# partypress <- readRDS("publication/rds/partypress.rds")
-monthly_agendas <- readRDS("../publication/rds/monthly_agendas.rds")
-
-# # Load the press releases data
-# load("data/salience/alldocs_lab_notxt.RData")
-# alldocs <- alldocs_lab_notxt
-# rm(alldocs_lab_notxt)
-# 
-# # Aggregate press releases monthly
-# alldocs$month <- substr(alldocs$date, 1, 7)
-# alldocs$n <- 1
-# 
-# # Create dataframe with monthly issue attention
-# imm_salience <- merge(aggregate(n ~ country + parlgov_id + month + issue_pred, alldocs, sum),
-#                    aggregate(n ~ parlgov_id + month, alldocs, sum) %>% dplyr::rename(n_party = n),
-#                    by = c("parlgov_id", "month"))
-# 
-# 
-# imm_salience$imm_salience <- imm_salience$n/imm_salience$n_party * 100
-# # imm_salience <- imm_salience %>% filter(country %in% c("germany", "austria"))
-# imm_salience$ym <- substr(imm_salience$month, 3, 8)
-# imm_salience <- select(imm_salience, -c(month))
-# 
-# # # Add category 9 where it is missing but other categories exist
-# add_obs <- unique(select(imm_salience, c(parlgov_id, country, ym)))
-# add_obs$imm_salience <- 0
-# add_obs$issue_pred <- 9
-# 
-# existing_obs <- (imm_salience %>% filter(issue_pred == 9) %>% select(parlgov_id, ym))
-# 
-# nrow(imm_salience)
-# imm_salience <- rbind.fill(imm_salience, add_obs[!(str_c(add_obs$parlgov_id, add_obs$ym) %in% str_c(existing_obs$parlgov_id, existing_obs$ym)), ])
-# nrow(imm_salience)
-
-imm_salience <- monthly_agendas %>% filter(issue_multi == 9)
-imm_salience <- dplyr::rename(imm_salience, imm_salience = attention)
+imm_salience <- monthly_agendas %>% filter(issue == 9)
+imm_salience <- dplyr::rename(imm_salience, imm_salience = share_multi)
 
 imm_salience$country <- imm_salience$country_name %>% str_replace_all(c("austria" = "AT", 
                                         "ireland" = "IE",
@@ -71,14 +36,12 @@ imm_salience[1:20, ]
 
 
 # Load polls data and aggregate monthly
-polls <- readRDS("data/polls/polls.RDS") %>% mutate(polling = percent) %>% 
+polls <- readRDS("polls/polls.RDS") %>% mutate(polling = percent) %>% 
   mutate(ym = substr(date, 3, 7)) %>% 
   aggregate(polling ~ country + parlgov_id + party_name + ym, ., function(x) mean(x, na.rm = T))
 
 # Merge issue attention and polls
 replication <- merge(imm_salience, select(polls, -c(country, party_name)), all = T, by = c("parlgov_id", "ym"))
-
-# save(replication, file = "data/replication.RData")
 
 
 
@@ -91,16 +54,16 @@ replication <- merge(imm_salience, select(polls, -c(country, party_name)), all =
 listparty <- unique(filter(replication, !is.na(polling) & !is.na(country)) %>% select(c(country, parlgov_id, party_name)))
 listparty[order(listparty$country), ]
 
-
+# Define RRPs by ParlGov ID
 rrp <- c(50, # AT: FPÖ
-         2253, # DE: AfD (not in Abou-Chadi because too new!?)
+         2253, # DE: AfD
          1418, # DK: DF
          # ES
-         528, # PL: PiS? 
+         528, # PL: PiS
          # IE
          990, # NL: PvdV
          1546, # SE: SD
-         1272 # UK: UKIP?
+         1272 # UK: UKIP
          )
 
 
@@ -108,27 +71,35 @@ rrp <- c(50, # AT: FPÖ
 # RRP SALIENCE
 ###############
 
-replication <- imm_salience %>% filter(parlgov_id %in% rrp) %>% mutate(rrp_salience = imm_salience) %>% select(c(country, rrp_salience, ym)) %>% merge(replication, by = c("country", "ym"), all = T)
+# Add data about RRP salience
+replication <- imm_salience %>% 
+  filter(parlgov_id %in% rrp) %>% 
+  mutate(rrp_salience = imm_salience) %>% 
+  select(c(country, rrp_salience, ym)) %>% 
+  merge(replication, by = c("country", "ym"), all = T)
 
-
-# save(replication, file = "data/replication.RData")
 
 
 ###############
 # RRP POLLS
 ###############
 
-
-replication <- polls %>% filter(parlgov_id %in% rrp) %>% mutate(rrp_polling = polling) %>% select(c(country, rrp_polling, ym)) %>% merge(replication, by = c("country", "ym"), all = T)
+# Add polling data
+replication <- polls %>% 
+  filter(parlgov_id %in% rrp) %>% 
+  mutate(rrp_polling = polling) %>% 
+  select(c(country, rrp_polling, ym)) %>% 
+  merge(replication, by = c("country", "ym"), all = T)
 
 
 ###############
 # ASYLUM
 ###############
 
-# For severity, we use the monthly number of asylum applications as research assumes that refugee arrival and the state's capacity to react determines the problematization of immigration in public discourse.
+# "For severity, we use the monthly number of asylum applications as research assumes that refugee arrival and the state's capacity to react determines the problematization of immigration in public discourse." (Gessler & Hunger, 2022)
 
-asylum <- read.csv("data/asylum-eurostat/migr_asyappctzm__custom_627198_page_linear.csv") %>% 
+# Add monthly asylum data
+asylum <- read.csv("asylum-eurostat/migr_asyappctzm__custom_627198_page_linear.csv") %>% 
   mutate(ym = TIME_PERIOD %>% substr(3, 7),
          country = geo,
          asylum = OBS_VALUE) %>% 
@@ -136,20 +107,8 @@ asylum <- read.csv("data/asylum-eurostat/migr_asyappctzm__custom_627198_page_lin
 
 replication <- asylum %>% merge(replication, by = c("country", "ym"), all = T)
 
-
-
+# Transform
 replication$asylum_z <- scale(replication$asylum, center = TRUE, scale = TRUE) %>% as.numeric
-
-
-###############
-# PARLGOV
-###############
-
-# parlgov <- read_csv("data/parlgov_view_party.csv") %>% dplyr::rename(parlgov_id = party_id, parlgov_party_name = party_name)
-# 
-# replication <- merge(imm_salience_polls, parlgov, by = "parlgov_id", all.x = T)
-
-# not needed
 
 
 
@@ -160,23 +119,19 @@ replication$asylum_z <- scale(replication$asylum, center = TRUE, scale = TRUE) %
 # done in Stata
 
 
-
-
 ###############
 # GOOGLE TRENDS (aka public salience)
 ###############
 
-# Alternatively, we also consider that what mattered could be the perception of a crisis rather than the extent of refugee arrivals. Given the scarcity of opinion data over time, we rely on Google Search Trends to measure public attention to immigration. Specifically, we use the Google Knowledge Graph technology to track the frequency of a search query topic rather than individual search strings (Siliverstovs and Wochner, Reference Siliverstovs and Wochner2018). In line with advice from previous applications (Granka, Reference Granka2013; Mellon, Reference Mellon2013; Chykina and Crabtree, Reference Chykina and Crabtree2018), we compare different search trends with Eurobarometer results for immigration salience as the most important problem in a country and select the Google trend for “refugee” as closest correlate to the Eurobarometer in Germany and Austria. T
-
 # replication$pub_salience_z <- scale(replication$pub_salience_z, center = TRUE, scale = TRUE)
 
 
-pub_salience <- gtrends("Fl�chtling", geo = "DE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time
+pub_salience <- gtrends("Flüchtling", geo = "DE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time
 
 
 # gtrends("Flüchtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)
 
-if(!("AT" %in% pub_salience$geo)) pub_salience <- gtrends("Fl�chtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
+if(!("AT" %in% pub_salience$geo)) pub_salience <- gtrends("Flüchtling", geo = "AT", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
 if(!("IE" %in% pub_salience$geo)) pub_salience <- gtrends("refugee", geo = "IE", time = "2010-01-01 2020-12-31", onlyInterest = T)$interest_over_time %>% rbind.fill(pub_salience)
 
@@ -201,22 +156,7 @@ pub_salience$pub_salience_z <- scale(pub_salience$pub_salience, center = TRUE, s
 replication <- pub_salience %>% select(country, ym, pub_salience, pub_salience_z) %>% merge(replication, by = c("country", "ym"), all = T)
 
 
-save(replication, file = "data/replication.RData")
-
-###############
-# DEFINING CR PARTIES
-###############
-
-# not needed
-
-
-###############
-# DEFINING TIMES OF CRISIS
-###############
-
-# To delimit the crisis period, we additionally calculate a binary measure based on this series. We determine as refugee crisis the period in which the searches for the refugee topic are above the country average. Thereby, we place the start of the crisis in July 2015 in Austria, and in August 2015 in Germany and Switzerland. This period of heightened attention ends in July 2016 in Austria, in November 2016 in Germany, and in February 2017 in Switzerland, the first month in which attention to the topic falls below the mean.
-
-# not needed
+save(replication, file = "replication_rrp.RData")
 
 
 ###############
@@ -245,5 +185,7 @@ stata$sal_rrp <- stata$sal_rrp*100
 
 
 stata$date <- ym(stata$ym)
-write_dta(stata, path = "stata-replication.dta")
+
+# Write to DTA
+write_dta(stata, path = "stata-replication_rrp.dta")
 
