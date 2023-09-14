@@ -1,5 +1,9 @@
 # The PARTYPRESS Database: A New Comparative Database of Parties’ Press Releases
 
+You can find the corresponding research article here: 
+
+Erfort, C., Stoetzer, L. F., & Klüver, H. (2023). The PARTYPRESS Database: A new comparative database of parties’ press releases. Research & Politics, 10(3). [https://doi.org/10.1177/20531680231183512](https://doi.org/10.1177/20531680231183512)
+
 Political parties emphasize different issues in their public communication efforts to address the topics of the day and to strengthen their policy profiles. Here, we develop and evaluate models to automatically classify parties' press releases into issue categories to dynamically measure issue attention.
 
 This repository contains the scripts where we build and evaluate our text models.
