@@ -1,5 +1,9 @@
 # The PARTYPRESS Database: A New Comparative Database of Parties’ Press Releases
 
+<p align="center">
+  <img src="files/partypress_v1.png" alt="PARTYPRESS v1 — hex project badge" width="240">
+</p>
+
 You can find the corresponding research article here: 
 
 Erfort, C., Stoetzer, L. F., & Klüver, H. (2023). The PARTYPRESS Database: A new comparative database of parties’ press releases. Research & Politics, 10(3). [https://doi.org/10.1177/20531680231183512](https://doi.org/10.1177/20531680231183512)
@@ -30,7 +34,7 @@ The entire dataset of press releases is not published here.
 The following figure shows an example for the measurement of the immigration agendas of German parties.
 
 *Issue attention of German parties to the environment* <br>
-<img src="https://github.com/cornelius-erfort/scripts-issue-agendas/blob/main/plots/immigration-agenda-germany.png" width="60%">
+<img src="https://raw.githubusercontent.com/cornelius-erfort/scripts-issue-agendas/main/plots/immigration-agenda-germany.png" alt="Issue attention of German parties to immigration" width="60%">
 
 
 ### Author
